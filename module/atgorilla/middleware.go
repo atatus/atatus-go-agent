@@ -1,0 +1,149 @@
+// Licensed to Elasticsearch B.V. under one or more contributor
+// license agreements. See the NOTICE file distributed with
+// this work for additional information regarding copyright
+// ownership. Elasticsearch B.V. licenses this file to you under
+// the Apache License, Version 2.0 (the "License"); you may
+// not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+package atgorilla // import "go.atatus.com/agent/module/atgorilla"
+
+import (
+	"net/http"
+
+	"github.com/gorilla/mux"
+
+	atatus "go.atatus.com/agent"
+	"go.atatus.com/agent/module/athttp"
+)
+
+// Instrument instruments the mux.Router so that requests are traced.
+//
+// Instrument installs middleware into r, and alsos overrides
+// r.NotFoundHandler and r.MethodNotAllowedHandler so that they
+// are traced. If you modify either of those fields, you must do so
+// before calling Instrument.
+func Instrument(r *mux.Router, o ...Option) {
+	m := Middleware(o...)
+	r.Use(m)
+	r.NotFoundHandler = WrapNotFoundHandler(r.NotFoundHandler, m)
+	r.MethodNotAllowedHandler = WrapMethodNotAllowedHandler(r.MethodNotAllowedHandler, m)
+}
+
+// WrapNotFoundHandler wraps h with m. If h is nil, then http.NotFoundHandler() will be used.
+func WrapNotFoundHandler(h http.Handler, m mux.MiddlewareFunc) http.Handler {
+	if h == nil {
+		h = http.NotFoundHandler()
+	}
+	return m(h)
+}
+
+// WrapMethodNotAllowedHandler wraps h with m. If h is nil, then a default handler
+// will be used that returns status code 405.
+func WrapMethodNotAllowedHandler(h http.Handler, m mux.MiddlewareFunc) http.Handler {
+	if h == nil {
+		h = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		})
+	}
+	return m(h)
+}
+
+// Middleware returns a new gorilla/mux middleware handler
+// for tracing requests and reporting errors.
+//
+// This middleware will recover and report panics, so it can
+// be used instead of the gorilla/middleware.RecoveryHandler
+// middleware.
+//
+// Middleware does not get invoked when a route cannot be
+// matched, or when an unsupported method is used. To report
+// transactions in these cases, you should use the Instrument
+// function, or set the router's NotFoundHandler and
+// MethodNotAllowedHandler fields using the Wrap functions in
+// this package.
+//
+// By default, the middleware will use atatus.DefaultTracer.
+// Use WithTracer to specify an alternative tracer.
+func Middleware(o ...Option) mux.MiddlewareFunc {
+	opts := options{
+		tracer: atatus.DefaultTracer,
+	}
+	for _, o := range o {
+		o(&opts)
+	}
+	if opts.requestIgnorer == nil {
+		opts.requestIgnorer = athttp.NewDynamicServerRequestIgnorer(opts.tracer)
+	}
+	athttpOptions := []athttp.ServerOption{
+		athttp.WithTracer(opts.tracer),
+		athttp.WithServerRequestName(routeRequestName),
+		athttp.WithServerRequestIgnorer(opts.requestIgnorer),
+	}
+	if opts.panicPropagation {
+		athttpOptions = append(athttpOptions, athttp.WithPanicPropagation())
+	}
+	return func(h http.Handler) http.Handler {
+		return athttp.Wrap(h, athttpOptions...)
+	}
+}
+
+func routeRequestName(req *http.Request) string {
+	if route := mux.CurrentRoute(req); route != nil {
+		tpl, err := route.GetPathTemplate()
+		if err == nil {
+			return req.Method + " " + massageTemplate(tpl)
+		}
+	}
+	return athttp.UnknownRouteRequestName(req)
+}
+
+type options struct {
+	tracer           *atatus.Tracer
+	requestIgnorer   athttp.RequestIgnorerFunc
+	panicPropagation bool
+}
+
+// Option sets options for tracing.
+type Option func(*options)
+
+// WithTracer returns an Option which sets t as the tracer
+// to use for tracing server requests.
+func WithTracer(t *atatus.Tracer) Option {
+	if t == nil {
+		panic("t == nil")
+	}
+	return func(o *options) {
+		o.tracer = t
+	}
+}
+
+// WithRequestIgnorer returns a Option which sets r as the
+// function to use to determine whether or not a request should
+// be ignored. If r is nil, all requests will be reported.
+func WithRequestIgnorer(r athttp.RequestIgnorerFunc) Option {
+	if r == nil {
+		r = athttp.IgnoreNone
+	}
+	return func(o *options) {
+		o.requestIgnorer = r
+	}
+}
+
+// WithPanicPropagation returns a Option which enable panic propagation.
+// Any panic will be recovered and recorded as an error in a transaction, then
+// panic will be caused again.
+func WithPanicPropagation() Option {
+	return func(o *options) {
+		o.panicPropagation = true
+	}
+}

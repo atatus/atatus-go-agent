@@ -1,0 +1,7 @@
+*.swp
+*.test
+*.out
+docs/html
+build
+.idea
+internal/sysinfo/vendor
