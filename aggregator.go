@@ -107,7 +107,7 @@ func newAggregator(service tracerService) *aggregator {
 		agg.logger = apmlog.DefaultLogger
 	}
 
-	timeout := 10
+	timeout := 60
 	agg.flushTicker = time.NewTicker(time.Duration(timeout) * time.Second)
 
 	agg.c.txnChan = make(chan tracerEvent, tracerEventChannelCap)
