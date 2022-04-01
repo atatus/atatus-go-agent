@@ -1,6 +1,6 @@
 module tracecontexttest
 
-require go.atatus.com/agent/module/athttp v1.0.0
+require go.atatus.com/agent/module/athttp v1.0.1
 
 replace go.atatus.com/agent => ../..
 

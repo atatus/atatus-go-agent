@@ -6,8 +6,8 @@ require (
 	github.com/onsi/ginkgo v1.8.0 // indirect
 	github.com/onsi/gomega v1.5.0 // indirect
 	github.com/stretchr/testify v1.6.1
-	go.atatus.com/agent v1.0.0
-	go.atatus.com/agent/module/atsql v1.0.0
+	go.atatus.com/agent v1.0.1
+	go.atatus.com/agent/module/atsql v1.0.1
 	mellium.im/sasl v0.2.1 // indirect
 )
 

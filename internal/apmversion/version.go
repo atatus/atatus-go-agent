@@ -19,5 +19,5 @@ package apmversion
 
 const (
 	// AgentVersion is the Atatus Go Agent version.
-	AgentVersion = "1.0.0"
+	AgentVersion = "1.0.1"
 )
