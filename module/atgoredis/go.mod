@@ -7,7 +7,7 @@ require (
 	github.com/onsi/ginkgo v1.8.0 // indirect
 	github.com/onsi/gomega v1.5.0 // indirect
 	github.com/stretchr/testify v1.6.1
-	go.atatus.com/agent v1.0.1
+	go.atatus.com/agent v1.1.0
 	gopkg.in/yaml.v2 v2.2.2 // indirect
 )
 

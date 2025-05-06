@@ -98,7 +98,7 @@ type configuration struct {
 
 	// NotifyHost controls the server path where the data is to be sent
 	//
-	// Defaults to apm-rx.atatus.com/track/apm
+	// You can override using ATATUS_NOTIFY_HOST environment variable.
 	NotifyHost string
 
 	// NotifyProxy controls the proxy that has to be used
@@ -136,7 +136,7 @@ func newConfiguration(service tracerService) configuration {
 	c.LicenseKey = service.LicenseKey
 	c.APIAnalytics = service.APIAnalytics
 	c.TraceThreshold = service.TraceThreshold
-	c.NotifyHost = "apm-rx.atatus.com"
+	c.NotifyHost = service.NotifyHost
 	c.NotifyInterval = 60
 	c.Hostname, _ = os.Hostname()
 	c.CollectErrors = true

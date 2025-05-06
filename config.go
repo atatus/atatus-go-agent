@@ -44,6 +44,7 @@ const (
 	envCaptureHeaders             = "ATATUS_CAPTURE_HEADERS"
 	envCaptureBody                = "ATATUS_CAPTURE_BODY"
 	envServiceName                = "ATATUS_APP_NAME"
+	envServiceNotifyHost          = "ATATUS_NOTIFY_HOST"
 	envServiceVersion             = "ATATUS_APP_VERSION"
 	envEnvironment                = "ATATUS_ENVIRONMENT"
 	envLicenseKey                 = "ATATUS_LICENSE_KEY"
@@ -263,6 +264,11 @@ func parseCaptureBody(name, value string) (CaptureBodyMode, error) {
 func initialLicenseKey() (key string) {
 	key = os.Getenv(envLicenseKey)
 	return key
+}
+
+func initialNotifyHost() (host string) {
+	host = os.Getenv(envServiceNotifyHost)
+	return host
 }
 
 func initialAPIAnalytics() (bool, error) {

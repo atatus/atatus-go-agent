@@ -79,6 +79,13 @@ type TracerOptions struct {
 	// ATATUS_LICENSE_KEY environment variable.
 	LicenseKey string
 
+	// NotifyHost holds the APM Notify host.
+	//
+	// If NotifyHost is empty, the app name will be defined using the
+	// ATATUS_NOTIFY_HOST environment variable, or if that is not set,
+	// the default notify host will be used.
+	NotifyHost string
+
 	// APIAnalytics holds the APM Analytics Flag.
 	//
 	// If APIAnalytics is empty, the API Analytics will be defined using the
@@ -340,6 +347,15 @@ func (opts *TracerOptions) initDefaults(continueOnError bool) error {
 		opts.LicenseKey = licenseKey
 	}
 
+	notifyHost := initialNotifyHost()
+	if opts.NotifyHost == "" {
+		opts.NotifyHost = notifyHost
+	}
+
+	if opts.NotifyHost == "" { // default value
+		opts.NotifyHost = "https://apm-rx.atatus.com"
+	}
+
 	apiAnalytics, err := initialAPIAnalytics()
 	if failed(err) {
 		apiAnalytics = false
@@ -371,6 +387,7 @@ type tracerService struct {
 	LicenseKey     string
 	APIAnalytics   bool
 	TraceThreshold int
+	NotifyHost     string
 }
 
 // Tracer manages the sampling and sending of transactions to
@@ -487,6 +504,7 @@ func newTracer(opts TracerOptions) *Tracer {
 	t.Service.Version = opts.ServiceVersion
 	t.Service.Environment = opts.ServiceEnvironment
 	t.Service.LicenseKey = opts.LicenseKey
+	t.Service.NotifyHost = opts.NotifyHost
 	t.Service.APIAnalytics = opts.APIAnalytics
 	t.Service.TraceThreshold = opts.TraceThreshold
 	t.breakdownMetrics.enabled = opts.breakdownMetrics

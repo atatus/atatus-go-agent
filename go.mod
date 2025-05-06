@@ -2,7 +2,6 @@ module go.atatus.com/agent
 
 require (
 	github.com/armon/go-radix v1.0.0
-	github.com/elastic/go-licenser v0.3.1
 	github.com/elastic/go-sysinfo v1.1.1
 	github.com/google/go-cmp v0.3.1
 	github.com/jcchavezs/porto v0.1.0

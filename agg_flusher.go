@@ -24,6 +24,7 @@ import (
 	"net/url"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"go.atatus.com/agent/stacktrace"
@@ -93,26 +94,19 @@ func (agg *aggregator) sendToBackend(licenseKey, path string, d interface{}) (*r
 		return nil, err
 	}
 
-	var protocol string
-
-	if agg.config.UseSSL == true {
-		protocol = "https://"
-	} else {
-		protocol = "http://"
-	}
-
 	var host string
 	if path == analyticsTxnRelativePath {
-		if agg.config.NotifyHost == "apm-rx.atatus.com" ||
-			agg.config.NotifyHost == "apm-rx-collector.atatus.com" {
-			host = "an-rx.atatus.com"
+		if agg.config.NotifyHost == "https://apm-rx.atatus.com" ||
+			agg.config.NotifyHost == "https://apm-rx-collector.atatus.com" {
+			host = "https://an-rx.atatus.com"
 		} else {
 			host = agg.config.NotifyHost
 		}
 	} else {
 		host = agg.config.NotifyHost
 	}
-	notifyHost := protocol + host + path
+
+	notifyHost := strings.TrimSuffix(host, "/") + path
 
 	req, err := http.NewRequest("POST", notifyHost, bytes.NewBuffer(data))
 	req.Header.Set("Content-Type", "application/json")

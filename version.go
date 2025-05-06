@@ -19,5 +19,5 @@ package atatus // import "go.atatus.com/agent"
 
 const (
 	// AgentVersion is the Atatus Go Agent version.
-	AgentVersion = "1.0.1"
+	AgentVersion = "1.1.0"
 )

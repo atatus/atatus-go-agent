@@ -5,9 +5,9 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.7.0
 	github.com/valyala/fasthttp v1.29.0
-	go.atatus.com/agent v1.0.1
-	go.atatus.com/agent/module/atfasthttp v1.0.1
-	go.atatus.com/agent/module/athttp v1.0.1
+	go.atatus.com/agent v1.1.0
+	go.atatus.com/agent/module/atfasthttp v1.1.0
+	go.atatus.com/agent/module/athttp v1.1.0
 )
 
 replace go.atatus.com/agent => ../..
