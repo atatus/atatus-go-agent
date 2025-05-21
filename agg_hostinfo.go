@@ -43,13 +43,13 @@ type hostinfoPayload struct {
 
 func (agg *aggregator) agentSettingsMap() map[string]interface{} {
 	settings := make(map[string]interface{})
-	settings["appName"] = agg.config.AppName
-	settings["appVersion"] = agg.config.AppVersion
+	settings["appName"] = agg.service.AppName
+	settings["appVersion"] = agg.service.AppVersion
 	settings["agentVersion"] = AgentVersion
-	settings["analytics"] = agg.config.APIAnalytics
-	settings["environment"] = agg.config.Environment
+	settings["analytics"] = agg.service.Analytics
+	settings["environment"] = agg.service.Environment
 	settings["goCompiler"] = goRuntime.Name
 	settings["go"] = goRuntime.Version
-	settings["traceThreshold"] = agg.config.TraceThreshold
+	settings["traceThreshold"] = agg.service.TraceThreshold
 	return settings
 }

@@ -19,9 +19,9 @@ package atatus
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -56,6 +56,7 @@ type response400 struct {
 
 type hostinfoResponse200 struct {
 	Analytics bool `json:"analytics"`
+	Tracing   bool `json:"tracing"`
 
 	CapturePercentiles    bool     `json:"capturePercentiles"`
 	ExtRequestPatterns    []string `json:"extRequestPatterns"`
@@ -96,14 +97,14 @@ func (agg *aggregator) sendToBackend(licenseKey, path string, d interface{}) (*r
 
 	var host string
 	if path == analyticsTxnRelativePath {
-		if agg.config.NotifyHost == "https://apm-rx.atatus.com" ||
-			agg.config.NotifyHost == "https://apm-rx-collector.atatus.com" {
+		if agg.service.NotifyHost == "https://apm-rx.atatus.com" ||
+			agg.service.NotifyHost == "https://apm-rx-collector.atatus.com" {
 			host = "https://an-rx.atatus.com"
 		} else {
-			host = agg.config.NotifyHost
+			host = agg.service.NotifyHost
 		}
 	} else {
-		host = agg.config.NotifyHost
+		host = agg.service.NotifyHost
 	}
 
 	notifyHost := strings.TrimSuffix(host, "/") + path
@@ -112,7 +113,7 @@ func (agg *aggregator) sendToBackend(licenseKey, path string, d interface{}) (*r
 	req.Header.Set("Content-Type", "application/json")
 
 	q := req.URL.Query()
-	q.Add("licenseKey", agg.config.LicenseKey)
+	q.Add("license_key", agg.service.LicenseKey)
 	q.Add("agent_name", agentLanguage)
 	q.Add("agent_version", AgentVersion)
 	req.URL.RawQuery = q.Encode()
@@ -123,32 +124,34 @@ func (agg *aggregator) sendToBackend(licenseKey, path string, d interface{}) (*r
 
 	var client *http.Client
 
-	if agg.config.NotifyProxy != "" {
-		if agg.logger != nil {
-			agg.logger.Debugf("Notify Proxy: %s\n", agg.config.NotifyProxy)
-		}
-		proxyURL, err := url.Parse(agg.config.NotifyProxy)
-		if err != nil {
-			if agg.logger != nil {
-				agg.logger.Errorf("Notify Proxy Parsing Failed: %s Error: %s\n", agg.config.NotifyProxy, err.Error())
-			}
-			return nil, err
-		}
-		if agg.logger != nil {
-			agg.logger.Debugf("Notify Proxy Details: %+v, Scheme: %s\n", proxyURL, proxyURL.Scheme)
-		}
+	// if agg.service.NotifyProxy != "" {
+	// 	if agg.logger != nil {
+	// 		agg.logger.Debugf("Notify Proxy: %s\n", agg.service.NotifyProxy)
+	// 	}
+	// 	proxyURL, err := url.Parse(agg.service.NotifyProxy)
+	// 	if err != nil {
+	// 		if agg.logger != nil {
+	// 			agg.logger.Errorf("Notify Proxy Parsing Failed: %s Error: %s\n", agg.service.NotifyProxy, err.Error())
+	// 		}
+	// 		return nil, err
+	// 	}
+	// 	if agg.logger != nil {
+	// 		agg.logger.Debugf("Notify Proxy Details: %+v, Scheme: %s\n", proxyURL, proxyURL.Scheme)
+	// 	}
 
-		var tr *http.Transport
-		if proxyURL.Scheme == "http" || proxyURL.Scheme == "https" {
-			tr = &http.Transport{Proxy: http.ProxyURL(proxyURL)}
-			client = &http.Client{Transport: tr}
-		} else {
-			client = &http.Client{}
-		}
+	// 	var tr *http.Transport
+	// 	if proxyURL.Scheme == "http" || proxyURL.Scheme == "https" {
+	// 		tr = &http.Transport{Proxy: http.ProxyURL(proxyURL)}
+	// 		client = &http.Client{Transport: tr}
+	// 	} else {
+	// 		client = &http.Client{}
+	// 	}
 
-	} else {
-		client = &http.Client{}
-	}
+	// } else {
+	// 	client = &http.Client{}
+	// }
+
+	client = &http.Client{}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -214,24 +217,27 @@ func (agg *aggregator) flush(b *batchEvents) {
 
 	lickey_appname_not_set := false
 
-	if agg.config.LicenseKey == "" {
+	if agg.service.LicenseKey == "" {
 		lickey_appname_not_set = true
 		if agg.logger != nil {
 			agg.logger.Errorf("ATATUS_LICENSE_KEY is not set! Unable to send any data.")
 		}
+		fmt.Println("ATATUS_LICENSE_KEY is not set! Unable to send any data.")
 	}
 
-	if agg.config.AppName == "" {
+	if agg.service.AppName == "" {
 		lickey_appname_not_set = true
 		if agg.logger != nil {
 			agg.logger.Errorf("ATATUS_APP_NAME is not set! Unable to send any data.")
 		}
+		fmt.Println("ATATUS_APP_NAME is not set! Unable to send any data.")
 	}
 
 	if lickey_appname_not_set == true {
 		if agg.logger != nil {
 			agg.logger.Errorf("Set both ATATUS_LICENSE_KEY & ATATUS_APP_NAME for the APM to work!")
 		}
+		fmt.Println("Set both ATATUS_LICENSE_KEY & ATATUS_APP_NAME for the APM to work!")
 
 		return
 	}
@@ -239,21 +245,21 @@ func (agg *aggregator) flush(b *batchEvents) {
 	var h header
 	h.Agent.Name = agentLanguage
 	h.Agent.Version = AgentVersion
-	h.Hostname = agg.config.Hostname
-	h.AppName = agg.config.AppName
-	h.AppVersion = agg.config.AppVersion
-	h.ReleaseStage = agg.config.Environment
-	h.LicenseKey = agg.config.LicenseKey
+	h.Hostname, _ = os.Hostname()
+	h.AppName = agg.service.AppName
+	h.AppVersion = agg.service.AppVersion
+	h.ReleaseStage = agg.service.Environment
+	h.LicenseKey = agg.service.LicenseKey
 	if agg.host.hostID != "" {
 		h.UniqueHostname = agg.host.hostID
 	} else {
 		h.UniqueHostname, _ = os.Hostname()
 	}
 	h.ContainerID = agg.host.dockerID
-	if agg.config.Tags != nil {
-		h.Tags = agg.config.Tags
-	}
-	// h.CustomData = agg.config.CustomData
+	// if agg.service.Tags != nil {
+	// 	h.Tags = agg.service.Tags
+	// }
+	// h.CustomData = agg.service.CustomData
 
 	activeAggregatorCount++
 	if activeAggregatorCount > (3600 / 30) {
@@ -270,10 +276,11 @@ func (agg *aggregator) flush(b *batchEvents) {
 		hp.hostinfo.Environment.GoLibrary = stacktrace.LibraryPackagesMap()
 		hp.hostinfo.Active = activeAggregator
 
-		r, err := agg.sendToBackend(agg.config.LicenseKey, hostinfoRelativePath, hp)
+		r, err := agg.sendToBackend(agg.service.LicenseKey, hostinfoRelativePath, hp)
 		agg.features.blocked = false
 		agg.features.capturePercentiles = false
 		agg.features.analytics = false
+		agg.features.tracing = false
 		if err == nil {
 			if r.StatusCode == 400 {
 				if agg.logger != nil {
@@ -292,6 +299,7 @@ func (agg *aggregator) flush(b *batchEvents) {
 			} else if r.StatusCode == 200 {
 				agg.features.capturePercentiles = r.HostinfoResponse200.CapturePercentiles
 				agg.features.analytics = r.HostinfoResponse200.Analytics
+				agg.features.tracing = r.HostinfoResponse200.Tracing
 			}
 		}
 	}
@@ -307,7 +315,7 @@ func (agg *aggregator) flush(b *batchEvents) {
 		for _, v := range b.err {
 			ep.E = append(ep.E, v)
 		}
-		agg.sendToBackend(agg.config.LicenseKey, errorRelativePath, ep)
+		agg.sendToBackend(agg.service.LicenseKey, errorRelativePath, ep)
 	}
 
 	if len(b.txn) > 0 {
@@ -331,7 +339,7 @@ func (agg *aggregator) flush(b *batchEvents) {
 			tp.T = append(tp.T, t)
 		}
 		if len(tp.T) > 0 {
-			agg.sendToBackend(agg.config.LicenseKey, txnRelativePath, tp)
+			agg.sendToBackend(agg.service.LicenseKey, txnRelativePath, tp)
 		}
 	}
 
@@ -352,7 +360,7 @@ func (agg *aggregator) flush(b *batchEvents) {
 					if totalSize >= totalAnalyticsPayloadSize {
 						tp.T = b.txnAnalytics[startai:ai]
 						if len(tp.T) > 0 {
-							agg.sendToBackend(agg.config.LicenseKey, analyticsTxnRelativePath, tp)
+							agg.sendToBackend(agg.service.LicenseKey, analyticsTxnRelativePath, tp)
 						}
 						startai = ai
 						totalSize = b.txnAnalytics[ai].Size
@@ -362,7 +370,7 @@ func (agg *aggregator) flush(b *batchEvents) {
 				if startai < ai {
 					tp.T = b.txnAnalytics[startai:ai]
 					if len(tp.T) > 0 {
-						agg.sendToBackend(agg.config.LicenseKey, analyticsTxnRelativePath, tp)
+						agg.sendToBackend(agg.service.LicenseKey, analyticsTxnRelativePath, tp)
 					}
 				}
 			}
@@ -426,7 +434,7 @@ func (agg *aggregator) flush(b *batchEvents) {
 				singleTracePayload.StartTime = tp.StartTime
 				singleTracePayload.header = tp.header
 				singleTracePayload.T = append(singleTracePayload.T, tp.T[i])
-				agg.sendToBackend(agg.config.LicenseKey, traceRelativePath, singleTracePayload)
+				agg.sendToBackend(agg.service.LicenseKey, traceRelativePath, singleTracePayload)
 			}
 		}
 	}
@@ -446,7 +454,7 @@ func (agg *aggregator) flush(b *batchEvents) {
 			emp.R = b.errRequest
 		}
 
-		agg.sendToBackend(agg.config.LicenseKey, errorMetricRelativePath, emp)
+		agg.sendToBackend(agg.service.LicenseKey, errorMetricRelativePath, emp)
 	}
 
 	if len(b.metrics) > 0 {
@@ -456,6 +464,6 @@ func (agg *aggregator) flush(b *batchEvents) {
 		mp.header = h
 		mp.M = b.metrics
 
-		agg.sendToBackend(agg.config.LicenseKey, metricsRelativePath, mp)
+		agg.sendToBackend(agg.service.LicenseKey, metricsRelativePath, mp)
 	}
 }

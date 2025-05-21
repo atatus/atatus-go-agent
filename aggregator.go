@@ -52,10 +52,12 @@ type features struct {
 	blocked            bool
 	capturePercentiles bool
 	analytics          bool
+	tracing            bool
 }
 
 type aggregator struct {
-	config configuration
+	// config  configuration
+	service *tracerService
 
 	b *batchEvents
 
@@ -73,6 +75,8 @@ type aggregator struct {
 	savedFramework string
 
 	logger WarningLogger
+
+	modelWriter *modelWriter // at_handling send stream
 }
 
 func newBatch() *batchEvents {
@@ -93,12 +97,13 @@ func newBatch() *batchEvents {
 
 var hostDetails map[string]interface{}
 
-func newAggregator(service tracerService) *aggregator {
+func newAggregator(service *tracerService) *aggregator {
 
-	config := newConfiguration(service)
+	config := newConfiguration(*service)
 
 	agg := aggregator{
-		config:  config,
+		service: service,
+		// config:  config,
 		process: &currentProcess,
 		system:  &localSystem,
 	}
@@ -173,6 +178,10 @@ func newAggregator(service tracerService) *aggregator {
 	go agg.processEvents()
 
 	return &agg
+}
+
+func (agg *aggregator) setModelWriter(m *modelWriter) { // at_handling send stream
+	agg.modelWriter = m // at_handling send stream
 }
 
 func (agg *aggregator) processEvents() {

@@ -12,15 +12,14 @@ modules=$(for dir in $(./scripts/moduledirs.sh); do (cd $dir && go list -m); don
 
 echo "# Create tags"
 for m in "" $modules; do
-	p=$(echo $m | ${SED_BINARY} "s@^${prefix}/\(.\{0,\}\)@\1/@")
-	echo git tag -s ${p}v${version} -m v${version}
+    p=$(echo $m | ${SED_BINARY} "s@^${prefix}/\(.\{0,\}\)@\1/@")
+    tag="${p}v${version}"
+    echo "📌 Creating tag: $tag"
+    git tag -a "$tag" -m "v${version}"
 done
 
 echo
 echo "# Push tags"
-echo -n git push upstream
-for m in "" $modules; do
-	p=$(echo $m | ${SED_BINARY} "s@^${prefix}/\(.\{0,\}\)@\1/@")
-	echo -n " ${p}v${version}"
-done
+git push --all
+git push --tag
 echo

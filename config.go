@@ -48,7 +48,8 @@ const (
 	envServiceVersion             = "ATATUS_APP_VERSION"
 	envEnvironment                = "ATATUS_ENVIRONMENT"
 	envLicenseKey                 = "ATATUS_LICENSE_KEY"
-	envAPIAnalytics               = "ATATUS_API_ANALYTICS"
+	envAnalytics                  = "ATATUS_ANALYTICS"
+	envTracing                    = "ATATUS_TRACING"
 	envTraceThreshold             = "ATATUS_TRACE_THRESHOLD"
 	envSpanFramesMinDuration      = "ATATUS_SPAN_FRAMES_MIN_DURATION"
 	envActive                     = "ATATUS_ACTIVE"
@@ -271,8 +272,12 @@ func initialNotifyHost() (host string) {
 	return host
 }
 
-func initialAPIAnalytics() (bool, error) {
-	return configutil.ParseBoolEnv(envAPIAnalytics, false)
+func initialAnalytics() (bool, error) {
+	return configutil.ParseBoolEnv(envAnalytics, false)
+}
+
+func initialTracing() (bool, error) {
+	return configutil.ParseBoolEnv(envTracing, false)
 }
 
 func initialTraceThreshold() (int, error) {

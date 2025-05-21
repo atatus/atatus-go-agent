@@ -30,4 +30,5 @@ type Transport interface {
 	// stream has been closed (Read returns io.EOF) or the HTTP request
 	// terminates.
 	SendStream(context.Context, io.Reader) error
+	SetNotifyURL(notifyHost, licenseKey, appName, agentVersion string) error // at_handling send stream
 }

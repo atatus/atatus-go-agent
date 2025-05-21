@@ -152,8 +152,13 @@ func (agg *aggregator) processTxn(tx *Transaction, td *TransactionData) {
 	}
 
 	analytics := agg.features.analytics
-	if agg.config.APIAnalytics == false {
+	if agg.service.Analytics == false {
 		analytics = false
+	}
+
+	tracing := agg.features.tracing
+	if agg.service.Tracing == false {
+		tracing = false
 	}
 
 	mt, mta, statusCode, agReq := buildAggTxn(tx, td, analytics)
@@ -182,7 +187,7 @@ func (agg *aggregator) processTxn(tx *Transaction, td *TransactionData) {
 		txn.Add(mt)
 	}
 
-	if mt.Durations[1] > float64(agg.config.TraceThreshold) {
+	if mt.Durations[1] > float64(agg.service.TraceThreshold) {
 
 		var trace aggTrace
 
@@ -256,8 +261,11 @@ func (agg *aggregator) processTxn(tx *Transaction, td *TransactionData) {
 		}
 	}
 
-	td.reset(tx.tracer)
+	if agg.modelWriter != nil && tracing == true { // at_handling send stream
+		agg.modelWriter.writeTransaction(tx, td) // at_handling send stream
+	}
 
+	td.reset(tx.tracer)
 }
 
 func mapSpanType(typ string) string {
@@ -342,10 +350,19 @@ func buildAggSpan(s *Span, sd *SpanData) *aggLayer {
 func (agg *aggregator) processSpan(s *Span, sd *SpanData) {
 
 	if s.transactionID.Validate() == nil {
+		tracing := agg.features.tracing
+		if agg.service.Tracing == false {
+			tracing = false
+		}
+
 		mp := buildAggSpan(s, sd)
 		txnid := s.transactionID.String()
 
 		agg.b.txnSpan[txnid] = append(agg.b.txnSpan[txnid], mp)
+
+		if agg.modelWriter != nil && tracing == true { // at_handling send stream
+			agg.modelWriter.writeSpan(s, sd) // at_handling send stream
+		}
 	}
 
 	sd.reset(s.tracer)
@@ -498,7 +515,16 @@ func (agg *aggregator) processError(e *ErrorData) {
 
 	agErr := buildAggError(e)
 	if len(agg.b.err) <= 20 {
+		tracing := agg.features.tracing
+		if agg.service.Tracing == false {
+			tracing = false
+		}
+
 		agg.b.err = append(agg.b.err, agErr)
+
+		if agg.modelWriter != nil && tracing == true { // at_handling send stream
+			agg.modelWriter.writeError(e) // at_handling send stream
+		}
 	}
 
 	e.reset()

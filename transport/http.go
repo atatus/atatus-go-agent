@@ -48,7 +48,7 @@ import (
 )
 
 const (
-	intakePath  = "/intake/v2/events"
+	intakePath  = "/track/traces/spans" // at_handling send stream
 	profilePath = "/intake/v2/profile"
 	configPath  = "/config/v1/agents"
 
@@ -67,7 +67,7 @@ var (
 	// in case another package replaces the value later.
 	defaultHTTPTransport = http.DefaultTransport.(*http.Transport)
 
-	defaultServerURL, _  = url.Parse("http://localhost:8200")
+	defaultServerURL, _  = url.Parse("http://apm-rx.atatus.com") // at_handling send stream
 	defaultServerTimeout = 30 * time.Second
 )
 
@@ -86,31 +86,32 @@ type HTTPTransport struct {
 	intakeURLs  []*url.URL
 	configURLs  []*url.URL
 	profileURLs []*url.URL
+
+	notifyURL *url.URL // at_handling send stream
 }
 
 // NewHTTPTransport returns a new HTTPTransport which can be used for
 // streaming data to the APM Server. The returned HTTPTransport will be
 // initialized using the following environment variables:
 //
-// - ATATUS_SERVER_URL: the APM Server URL used for sending
-//   requests. If no URL is specified, then the transport will use the
-//   default URL "http://localhost:8200".
+//   - ATATUS_SERVER_URL: the APM Server URL used for sending
+//     requests. If no URL is specified, then the transport will use the
+//     default URL "http://localhost:8200".
 //
-// - ATATUS_SERVER_TIMEOUT: timeout for requests to the APM Server.
-//   If not specified, defaults to 30 seconds.
+//   - ATATUS_SERVER_TIMEOUT: timeout for requests to the APM Server.
+//     If not specified, defaults to 30 seconds.
 //
 // - ATATUS_SECRET_TOKEN: used to authenticate the agent.
 //
-// - ATATUS_SERVER_CERT: path to a PEM-encoded certificate that
-//   must match the APM Server-supplied certificate. This can be used
-//   to pin a self signed certificate. If this is set, then
-//   ATATUS_VERIFY_SERVER_CERT is ignored.
+//   - ATATUS_SERVER_CERT: path to a PEM-encoded certificate that
+//     must match the APM Server-supplied certificate. This can be used
+//     to pin a self signed certificate. If this is set, then
+//     ATATUS_VERIFY_SERVER_CERT is ignored.
 //
-// - ATATUS_VERIFY_SERVER_CERT: if set to "false", the transport
-//   will not verify the APM Server's TLS certificate. Only relevant
-//   when using HTTPS. By default, the transport will verify server
-//   certificates.
-//
+//   - ATATUS_VERIFY_SERVER_CERT: if set to "false", the transport
+//     will not verify the APM Server's TLS certificate. Only relevant
+//     when using HTTPS. By default, the transport will verify server
+//     certificates.
 func NewHTTPTransport() (*HTTPTransport, error) {
 	verifyServerCert, err := configutil.ParseBoolEnv(envVerifyServerCert, true)
 	if err != nil {
@@ -196,6 +197,24 @@ func NewHTTPTransport() (*HTTPTransport, error) {
 	return t, nil
 }
 
+// at_handling send stream
+func (t *HTTPTransport) SetNotifyURL(notifyHost, licenseKey, appName, agentVersion string) error {
+	notifyURL, err := url.Parse(notifyHost + "/track/traces/spans")
+	if err != nil {
+		return fmt.Errorf("invalid notify host: %w", err)
+	}
+
+	q := notifyURL.Query()
+	q.Set("license_key", licenseKey)
+	q.Set("app_name", appName)
+	q.Set("agent_name", "Go")
+	q.Set("version", agentVersion)
+	notifyURL.RawQuery = q.Encode()
+
+	t.notifyURL = notifyURL
+	return nil
+}
+
 // SetServerURL sets the APM Server URL (or URLs) for sending requests.
 // At least one URL must be specified, or the method will panic. The
 // list will be randomly shuffled.
@@ -272,15 +291,18 @@ func (t *HTTPTransport) deleteCommonHeader(key string) {
 // SendStream sends the stream over HTTP. If SendStream returns an error and
 // the transport is configured with more than one APM Server URL, then the
 // following request will be sent to the next URL in the list.
+// at_handling send stream
 func (t *HTTPTransport) SendStream(ctx context.Context, r io.Reader) error {
-	urlIndex := atomic.LoadInt32(&t.urlIndex)
-	intakeURL := t.intakeURLs[urlIndex]
-	req := t.newRequest("POST", intakeURL)
+	if t.notifyURL == nil {
+		return fmt.Errorf("NotifyURL is not set")
+	}
+
+	req := t.newRequest("POST", t.notifyURL)
 	req = requestWithContext(ctx, req)
 	req.Header = t.intakeHeaders
 	req.Body = ioutil.NopCloser(r)
 	if err := t.sendStreamRequest(req); err != nil {
-		atomic.StoreInt32(&t.urlIndex, (urlIndex+1)%int32(len(t.intakeURLs)))
+		// atomic.StoreInt32(&t.urlIndex, (urlIndex+1)%int32(len(t.intakeURLs))) // at_handling send stream
 		return err
 	}
 	return nil

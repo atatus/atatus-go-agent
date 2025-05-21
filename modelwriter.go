@@ -55,7 +55,7 @@ func (w *modelWriter) writeTransaction(tx *Transaction, td *TransactionData) {
 	w.json.RawByte('}')
 	w.buffer.WriteBlock(w.json.Bytes(), transactionBlockTag)
 	w.json.Reset()
-	td.reset(tx.tracer)
+	// td.reset(tx.tracer) // at_handling send stream
 }
 
 // writeSpan encodes s as JSON to the buffer, and then resets s.
@@ -67,7 +67,7 @@ func (w *modelWriter) writeSpan(s *Span, sd *SpanData) {
 	w.json.RawByte('}')
 	w.buffer.WriteBlock(w.json.Bytes(), spanBlockTag)
 	w.json.Reset()
-	sd.reset(s.tracer)
+	// sd.reset(s.tracer) // at_handling send stream
 }
 
 // writeError encodes e as JSON to the buffer, and then resets e.
@@ -79,7 +79,7 @@ func (w *modelWriter) writeError(e *ErrorData) {
 	w.json.RawByte('}')
 	w.buffer.WriteBlock(w.json.Bytes(), errorBlockTag)
 	w.json.Reset()
-	e.reset()
+	// e.reset() // at_handling send stream
 }
 
 // writeMetrics encodes m as JSON to the w.metricsBuffer, and then resets m.

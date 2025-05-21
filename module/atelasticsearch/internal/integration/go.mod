@@ -6,8 +6,8 @@ require (
 	github.com/mailru/easyjson v0.0.0-20180823135443-60711f1a8329 // indirect
 	github.com/olivere/elastic v6.2.16+incompatible
 	github.com/stretchr/testify v1.6.1
-	go.atatus.com/agent v1.1.0
-	go.atatus.com/agent/module/atelasticsearch v1.1.0
+	go.atatus.com/agent v1.2.0
+	go.atatus.com/agent/module/atelasticsearch v1.2.0
 )
 
 replace go.atatus.com/agent => ../../../..

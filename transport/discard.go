@@ -29,3 +29,8 @@ type discardTransport struct {
 func (s discardTransport) SendStream(context.Context, io.Reader) error {
 	return s.err
 }
+
+// at_handling send stream
+func (s discardTransport) SetNotifyURL(notifyHost, licenseKey, appName, agentVersion string) error {
+	return nil
+}

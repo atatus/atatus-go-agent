@@ -22,6 +22,7 @@ import (
 	"compress/zlib"
 	"context"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"sync"
@@ -86,11 +87,17 @@ type TracerOptions struct {
 	// the default notify host will be used.
 	NotifyHost string
 
-	// APIAnalytics holds the APM Analytics Flag.
+	// Analytics holds the APM Analytics Flag.
 	//
-	// If APIAnalytics is empty, the API Analytics will be defined using the
+	// If Analytics is empty, the API Analytics will be defined using the
 	// ATATUS_API_ANALYTICS environment variable.
-	APIAnalytics bool
+	Analytics bool
+
+	// Tracing holds the Distributed Tracing Flag.
+	//
+	// If Tracing is empty, the Distributed Tracing will be defined using the
+	// ATATUS_TRACING environment variable.
+	Tracing bool
 
 	// TraceThreshold holds the APM Trace Threshold value in ms.
 	//
@@ -252,6 +259,7 @@ func (opts *TracerOptions) initDefaults(continueOnError bool) error {
 	if failed(err) {
 		centralConfigEnabled = true
 	}
+	centralConfigEnabled = false // at_handling send stream
 
 	breakdownMetricsEnabled, err := initialBreakdownMetricsEnabled()
 	if failed(err) {
@@ -356,12 +364,19 @@ func (opts *TracerOptions) initDefaults(continueOnError bool) error {
 		opts.NotifyHost = "https://apm-rx.atatus.com"
 	}
 
-	apiAnalytics, err := initialAPIAnalytics()
+	tracing, err := initialTracing()
 	if failed(err) {
-		apiAnalytics = false
+		tracing = false
 	}
 
-	opts.APIAnalytics = apiAnalytics
+	opts.Tracing = tracing
+
+	analytics, err := initialAnalytics()
+	if failed(err) {
+		analytics = false
+	}
+
+	opts.Analytics = analytics
 
 	traceThreshold, err := initialTraceThreshold()
 	if failed(err) {
@@ -369,6 +384,8 @@ func (opts *TracerOptions) initDefaults(continueOnError bool) error {
 	}
 
 	opts.TraceThreshold = traceThreshold
+
+	opts.Transport.SetNotifyURL(opts.NotifyHost, opts.LicenseKey, opts.ServiceName, AgentVersion) // at_handling send stream
 
 	return nil
 }
@@ -381,11 +398,12 @@ type compressionOptions struct {
 
 // tracerService contains the Service Details
 type tracerService struct {
-	Name           string
-	Version        string
+	AppName        string
+	AppVersion     string
 	Environment    string
 	LicenseKey     string
-	APIAnalytics   bool
+	Analytics      bool
+	Tracing        bool
 	TraceThreshold int
 	NotifyHost     string
 }
@@ -500,12 +518,13 @@ func newTracer(opts TracerOptions) *Tracer {
 			local: make(map[string]func(*instrumentationConfigValues)),
 		},
 	}
-	t.Service.Name = opts.ServiceName
-	t.Service.Version = opts.ServiceVersion
+	t.Service.AppName = opts.ServiceName
+	t.Service.AppVersion = opts.ServiceVersion
 	t.Service.Environment = opts.ServiceEnvironment
 	t.Service.LicenseKey = opts.LicenseKey
 	t.Service.NotifyHost = opts.NotifyHost
-	t.Service.APIAnalytics = opts.APIAnalytics
+	t.Service.Analytics = opts.Analytics
+	t.Service.Tracing = opts.Tracing
 	t.Service.TraceThreshold = opts.TraceThreshold
 	t.breakdownMetrics.enabled = opts.breakdownMetrics
 
@@ -914,7 +933,7 @@ func (t *Tracer) Stats() TracerStats {
 
 func (t *Tracer) loop() {
 
-	agg := newAggregator(t.Service)
+	agg := newAggregator(&t.Service)
 
 	ctx, cancelContext := context.WithCancel(context.Background())
 	defer cancelContext()
@@ -960,8 +979,13 @@ func (t *Tracer) loop() {
 				case <-ctx.Done():
 				}
 			}
-			// at_handling send stream
-			// requestResult <- t.Transport.SendStream(ctx, iochanReader)
+			if agg.features.tracing == true {
+				t.Transport.SetNotifyURL(t.Service.NotifyHost, t.Service.LicenseKey, t.Service.AppName, AgentVersion) // at_handling send stream
+				requestResult <- t.Transport.SendStream(ctx, iochanReader)
+			} else {
+				_, _ = ioutil.ReadAll(iochanReader) // discard everything
+				requestResult <- nil
+			}
 		}
 	}()
 
@@ -1008,6 +1032,8 @@ func (t *Tracer) loop() {
 		cfg:           &cfg,
 		stats:         &stats,
 	}
+
+	agg.setModelWriter(&modelWriter) // at_handling send stream
 
 	handleTracerConfigCommand := func(cmd tracerConfigCommand) {
 		var oldMetricsInterval time.Duration
@@ -1069,12 +1095,12 @@ func (t *Tracer) loop() {
 			if cw == nil {
 				continue
 			}
-			var configWatcherContext context.Context
+			// var configWatcherContext context.Context // at_handling send stream
 			var watchParams apmconfig.WatchParams
-			watchParams.Service.Name = t.Service.Name
+			watchParams.Service.Name = t.Service.AppName
 			watchParams.Service.Environment = t.Service.Environment
-			configWatcherContext, stopConfigWatcher = context.WithCancel(ctx)
-			configChanges = cw.WatchConfig(configWatcherContext, watchParams)
+			// configWatcherContext, stopConfigWatcher = context.WithCancel(ctx) // at_handling send stream
+			// configChanges = cw.WatchConfig(configWatcherContext, watchParams) // at_handling send stream
 			// Silence go vet's "possible context leak" false positive.
 			// We call a previous stopConfigWatcher before reassigning
 			// the variable, and we have a defer at the top level of the
@@ -1364,7 +1390,7 @@ func (t *Tracer) metadataReader() io.Reader {
 }
 
 func (t *Tracer) encodeRequestMetadata(json *fastjson.Writer) {
-	service := makeService(t.Service.Name, t.Service.Version, t.Service.Environment)
+	service := makeService(t.Service.AppName, t.Service.AppVersion, t.Service.Environment)
 	json.RawString(`{"system":`)
 	t.system.MarshalFastJSON(json)
 	json.RawString(`,"process":`)

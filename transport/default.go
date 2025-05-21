@@ -46,12 +46,9 @@ func InitDefault() (Transport, error) {
 }
 
 func getDefault() (Transport, error) {
-	// at_handling HTTPTransport
-	return discardTransport{nil}, nil
-
-	// s, err := NewHTTPTransport()
-	// if err != nil {
-	// 	return discardTransport{err}, err
-	// }
-	// return s, nil
+	s, err := NewHTTPTransport()
+	if err != nil {
+		return discardTransport{err}, err
+	}
+	return s, nil
 }

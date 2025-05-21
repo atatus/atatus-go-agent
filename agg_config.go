@@ -47,11 +47,11 @@ type configuration struct {
 	// ATATUS_LICENSE_KEY environment variable.
 	LicenseKey string
 
-	// APIAnalytics holds the APM Analytics Flag.
+	// Analytics holds the APM Analytics Flag.
 	//
-	// If APIAnalytics is empty, the API Analytics will be defined using the
-	// ATATUS_API_ANALYTICS environment variable.
-	APIAnalytics bool
+	// If Analytics is empty, the API Analytics will be defined using the
+	// ATATUS_ANALYTICS environment variable.
+	Analytics bool
 
 	// TraceThreshold holds the APM Trace Threshold value in ms.
 	//
@@ -130,11 +130,11 @@ type configuration struct {
 func newConfiguration(service tracerService) configuration {
 	var c configuration
 
-	c.AppName = service.Name
-	c.AppVersion = service.Version
+	c.AppName = service.AppName
+	c.AppVersion = service.AppVersion
 	c.Environment = service.Environment
 	c.LicenseKey = service.LicenseKey
-	c.APIAnalytics = service.APIAnalytics
+	c.Analytics = service.Analytics
 	c.TraceThreshold = service.TraceThreshold
 	c.NotifyHost = service.NotifyHost
 	c.NotifyInterval = 60
