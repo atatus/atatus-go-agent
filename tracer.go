@@ -57,6 +57,8 @@ var (
 	// errors will be logged to stderr and the default values will
 	// be used instead.
 	DefaultTracer *Tracer
+
+	DefaultEndPointProfiling bool
 )
 
 func init() {
@@ -398,14 +400,15 @@ type compressionOptions struct {
 
 // tracerService contains the Service Details
 type tracerService struct {
-	AppName        string
-	AppVersion     string
-	Environment    string
-	LicenseKey     string
-	Analytics      bool
-	Tracing        bool
-	TraceThreshold int
-	NotifyHost     string
+	AppName           string
+	AppVersion        string
+	Environment       string
+	LicenseKey        string
+	Analytics         bool
+	Tracing           bool
+	TraceThreshold    int
+	NotifyHost        string
+	EndPointProfiling bool
 }
 
 // Tracer manages the sampling and sending of transactions to

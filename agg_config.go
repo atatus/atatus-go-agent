@@ -121,6 +121,10 @@ type configuration struct {
 	// Defaults to true
 	SendCode bool
 
+	//for endpoint tracing
+
+	EndPointProfiling bool
+
 	// Enabled controls if Atatus agent shall collect and send performance metrics
 	//
 	// Defaults to true
@@ -137,6 +141,7 @@ func newConfiguration(service tracerService) configuration {
 	c.Analytics = service.Analytics
 	c.TraceThreshold = service.TraceThreshold
 	c.NotifyHost = service.NotifyHost
+	c.EndPointProfiling = service.EndPointProfiling
 	c.NotifyInterval = 60
 	c.Hostname, _ = os.Hostname()
 	c.CollectErrors = true

@@ -5,3 +5,4 @@ docs/html
 build
 .idea
 internal/sysinfo/vendor
+test/

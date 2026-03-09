@@ -139,6 +139,7 @@ func (tx *Transaction) StartSpanOptions(name, spanType string, opts SpanOptions)
 			tx.childrenTimer.childStarted(span.timestamp)
 		}
 	}
+
 	return span
 }
 
@@ -240,6 +241,7 @@ func (t *Tracer) startSpan(name, spanType string, transactionID SpanID, opts Spa
 			span.Subtype, span.Action = span.Subtype[:dot], span.Subtype[dot+1:]
 		}
 	}
+
 	return span
 }
 
