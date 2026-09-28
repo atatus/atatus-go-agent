@@ -6,8 +6,8 @@ require (
 	github.com/stretchr/testify v1.6.1
 	github.com/valyala/bytebufferpool v1.0.0
 	github.com/valyala/fasthttp v1.26.0
-	go.atatus.com/agent v1.3.0
-	go.atatus.com/agent/module/athttp v1.3.0
+	go.atatus.com/agent v1.5.0
+	go.atatus.com/agent/module/athttp v1.5.0
 )
 
 replace (
