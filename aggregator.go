@@ -53,6 +53,9 @@ type features struct {
 	capturePercentiles bool
 	analytics          bool
 	tracing            bool
+	ignoreTxnUrls      []string
+	errorLimit         int
+	performance        bool
 }
 
 type aggregator struct {
@@ -185,6 +188,12 @@ func (agg *aggregator) setModelWriter(m *modelWriter) { // at_handling send stre
 }
 
 func (agg *aggregator) processEvents() {
+
+	go func(b *batchEvents) {
+		time.Sleep(100 * time.Millisecond) // slight delay to ensure tracer is initialized
+		agg.flush(b)
+	}(agg.b)
+
 	for {
 		select {
 		case event := <-agg.c.txnChan:

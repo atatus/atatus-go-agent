@@ -3,20 +3,23 @@
 // This product includes software developed at Datadog (https://www.datadoghq.com/).
 // Copyright 2022 Datadog, Inc.
 
+// NOTE: Not used anywhere; kept for reference from upstream repo.
 package internal
 
 import (
 	"net"
 	"net/url"
 	"os"
+	"strings"
 
+	"go.atatus.com/agent"
 	"go.atatus.com/agent/profiler-internal/log"
 )
 
 const (
 	DefaultAgentHostname  = "localhost"
 	DefaultTraceAgentPort = "8091"
-	defaultAPIURL         = "https://profiling-rx.atatus.com/track/profiling"
+	defaultAPIURL         = "https://profiling-rx.atatus.com/v1/profiling"
 )
 
 // This is a variable rather than a constant so it can be replaced in unit tests
@@ -32,6 +35,10 @@ var DefaultTraceAgentUDSPath = "/var/run/datadog/apm.socket"
 //   - Then, DefaultTraceAgentUDSPath, if the path exists
 //   - Finally, localhost:8126
 func AgentURLFromEnv() *url.URL {
+	apiURL := defaultAPIURL
+	if atatus.DefaultTracer != nil && atatus.DefaultTracer.Service.ProfilingServerUrl != "" {
+		apiURL = strings.TrimSuffix(atatus.DefaultTracer.Service.ProfilingServerUrl, "/") + "/v1/profiling"
+	}
 	if agentURL := os.Getenv("ATATUS_PROFILING_URL"); agentURL != "" { // ATCHG - DD_TRACE_AGENT_URL changed into ATATUS_PROFILING_URL
 		u, err := url.Parse(agentURL)
 		if err != nil {
@@ -45,7 +52,7 @@ func AgentURLFromEnv() *url.URL {
 			}
 		}
 	} else {
-		u, err := url.Parse(defaultAPIURL)
+		u, err := url.Parse(apiURL)
 		if err != nil {
 			log.Warn("Failed to parse default API URL: %s", err.Error())
 			return nil

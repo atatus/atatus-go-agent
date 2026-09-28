@@ -45,8 +45,8 @@ var (
 
 	kubepodsRegexp = regexp.MustCompile(
 		"" +
-			`(?:^/kubepods[\S]*/pod([^/]+)/$)|` +
-			`(?:^/kubepods\.slice/kubepods-[^/]+\.slice/kubepods-[^/]+-pod([^/]+)\.slice/$)`,
+			`(?:/kubepods[\S]*/pod([^/]+)/)|` +
+			`(?:/kubepods\.slice/kubepods-[^/]+\.slice/kubepods-[^/]+-pod([^/]+)\.slice/)`,
 	)
 
 	containerIDRegexp = regexp.MustCompile(
@@ -54,6 +54,15 @@ var (
 			"[[:xdigit:]]{64}|" +
 			"[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4,}" +
 			"$",
+	)
+
+	// Cgroup v2 patterns for mountinfo parsing
+	podUidMountInfoRegexp = regexp.MustCompile(
+		`/kubelet/pods/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4,})`,
+	)
+
+	cgroupV2ContainerRegexp = regexp.MustCompile(
+		`([0-9a-fA-F]{64}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4,})`,
 	)
 )
 
@@ -94,12 +103,56 @@ func cgroupContainerInfo() (*model.Container, *model.Kubernetes, error) {
 	return container, kubernetes, cgroupContainerInfoError
 }
 
+// parseMountInfo parses a line from /proc/self/mountinfo to extract container ID and pod UID
+// for cgroup v2 environments
+func parseMountInfo(line string, container **model.Container, kubernetes **model.Kubernetes) {
+	fields := strings.Fields(line)
+	if len(fields) <= 3 {
+		return
+	}
+
+	// Look for container ID in /etc/hostname mount entries
+	// Example: 3997 3984 253:1 /var/lib/docker/containers/6548c6863fb748...d6/hostname /etc/hostname ...
+	if strings.Contains(line, "/etc/hostname") {
+		path := fields[3]
+		containerMatch := cgroupV2ContainerRegexp.FindStringSubmatch(path)
+		// Edge case: validate that match has more than 1 group (captured container ID)
+		if len(containerMatch) > 1 {
+			containerID := containerMatch[1]
+			*container = &model.Container{ID: containerID}
+		}
+	}
+
+	// Look for pod UID anywhere in the line
+	// Pattern: /kubelet/pods/{uuid}
+	podMatch := podUidMountInfoRegexp.FindStringSubmatch(line)
+	if len(podMatch) > 1 {
+		podUID := podMatch[1]
+		hostname, _ := os.Hostname()
+		*kubernetes = &model.Kubernetes{
+			Pod: &model.KubernetesPod{
+				Name: hostname,
+				UID:  podUID,
+			},
+		}
+	}
+}
+
 func readCgroupContainerInfo(r io.Reader) (*model.Container, *model.Kubernetes, error) {
 	var container *model.Container
 	var kubernetes *model.Kubernetes
+	var isCgroupV2 bool
 	s := bufio.NewScanner(r)
+	lineNum := 0
 	for s.Scan() {
-		fields := strings.SplitN(s.Text(), ":", 3)
+		line := s.Text()
+		// Detect cgroup v2: first line is "0::/"
+		if lineNum == 0 && line == "0::/" {
+			isCgroupV2 = true
+		}
+		lineNum++
+
+		fields := strings.SplitN(line, ":", 3)
 		if len(fields) != 3 {
 			continue
 		}
@@ -153,5 +206,34 @@ func readCgroupContainerInfo(r io.Reader) (*model.Container, *model.Kubernetes, 
 	if err := s.Err(); err != nil {
 		return nil, nil, err
 	}
+
+	// Fall back to mountinfo for cgroup v2 if container info not found
+	if isCgroupV2 && container == nil {
+		if err := readMountInfo(&container, &kubernetes); err != nil {
+			return container, kubernetes, err
+		}
+	}
+
 	return container, kubernetes, nil
+}
+
+// readMountInfo reads /proc/self/mountinfo and extracts container and kubernetes info
+// for cgroup v2 environments
+func readMountInfo(container **model.Container, kubernetes **model.Kubernetes) error {
+	f, err := os.Open("/proc/self/mountinfo")
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	s := bufio.NewScanner(f)
+	for s.Scan() {
+		line := s.Text()
+		parseMountInfo(line, container, kubernetes)
+		// Continue until we have both container and pod info, or reach end of file
+		if *container != nil && *kubernetes != nil && (*kubernetes).Pod != nil && (*kubernetes).Pod.UID != "" {
+			return nil
+		}
+	}
+	return s.Err()
 }

@@ -42,10 +42,15 @@ import (
 )
 
 const (
-	defaultPreContext     = 3
-	defaultPostContext    = 3
-	gracePeriodJitter     = 0.1 // +/- 10%
-	tracerEventChannelCap = 1000
+	defaultPreContext         = 3
+	defaultPostContext        = 3
+	gracePeriodJitter         = 0.1 // +/- 10%
+	tracerEventChannelCap     = 1000
+	defaultApmServerUrl       = "https://apm-rx.atatus.com"
+	defaultAnalyticsServerUrl = "https://an-rx.atatus.com"
+	defaultTracesServerUrl    = "https://dt-rx.atatus.com"
+	defaultLogsServerUrl      = "https://log-rx.atatus.com"
+	defaultProfilingServerUrl = "https://profiling-rx.atatus.com"
 )
 
 var (
@@ -88,6 +93,49 @@ type TracerOptions struct {
 	// ATATUS_NOTIFY_HOST environment variable, or if that is not set,
 	// the default notify host will be used.
 	NotifyHost string
+
+	// ServerUrl holds the Server URL.
+	//
+	// If ServerUrl is empty, the server URL will be defined using the
+	// ATATUS_SERVER_URL environment variable.
+	ServerUrl string
+
+	// ApmServerUrl holds the APM Server URL.
+	//
+	// If ApmServerUrl is empty, the APM server URL will be defined using the
+	// ATATUS_APM_SERVER_URL environment variable.
+	ApmServerUrl string
+
+	// AnalyticsServerUrl holds the Analytics Server URL.
+	//
+	// If AnalyticsServerUrl is empty, the Analytics server URL will be defined using the
+	// ATATUS_ANALYTICS_SERVER_URL environment variable.
+	AnalyticsServerUrl string
+
+	// TracesServerUrl holds the Traces Server URL.
+	//
+	// If TracesServerUrl is empty, the Traces server URL will be defined using the
+	// ATATUS_TRACES_SERVER_URL environment variable.
+	TracesServerUrl string
+
+	// LogsServerUrl holds the Logs Server URL.
+	//
+	// If LogsServerUrl is empty, the Logs server URL will be defined using the
+	// ATATUS_LOGS_SERVER_URL environment variable.
+	LogsServerUrl string
+
+	// ProfilingServerUrl holds the Profiling Server URL.
+	//
+	// If ProfilingServerUrl is empty, the Profiling server URL will be defined using the
+	// ATATUS_PROFILING_SERVER_URL environment variable.
+	ProfilingServerUrl string
+
+	// Region holds the Atatus data region.
+	//
+	// If Region is empty, the region will be defined using the
+	// ATATUS_REGION environment variable. Valid values are in and eu;
+	// if it is not set, the default server URLs are used.
+	Region string
 
 	// Analytics holds the APM Analytics Flag.
 	//
@@ -362,8 +410,89 @@ func (opts *TracerOptions) initDefaults(continueOnError bool) error {
 		opts.NotifyHost = notifyHost
 	}
 
-	if opts.NotifyHost == "" { // default value
-		opts.NotifyHost = "https://apm-rx.atatus.com"
+	serverUrl := initialServerUrl()
+	if opts.ServerUrl == "" {
+		opts.ServerUrl = serverUrl
+	}
+	
+	apmServerUrl := initialApmServerUrl()
+	if opts.ApmServerUrl == "" {
+		opts.ApmServerUrl = apmServerUrl
+	}
+
+	if opts.ApmServerUrl == "" { // default value
+		opts.ApmServerUrl = defaultApmServerUrl
+	}
+
+	analyticsServerUrl := initialAnalyticsServerUrl()
+	if opts.AnalyticsServerUrl == "" {
+		opts.AnalyticsServerUrl = analyticsServerUrl
+	}
+
+	if opts.AnalyticsServerUrl == "" { // default value
+		opts.AnalyticsServerUrl = defaultAnalyticsServerUrl
+	}
+
+	tracesServerUrl := initialTracesServerUrl()
+	if opts.TracesServerUrl == "" {
+		opts.TracesServerUrl = tracesServerUrl
+	}
+
+	if opts.TracesServerUrl == "" { // default value
+		opts.TracesServerUrl = defaultTracesServerUrl
+	}
+
+	logsServerUrl := initialLogsServerUrl()
+	if opts.LogsServerUrl == "" {
+		opts.LogsServerUrl = logsServerUrl
+	}
+
+	if opts.LogsServerUrl == "" { // default value
+		opts.LogsServerUrl = defaultLogsServerUrl
+	}
+
+	profilingServerUrl := initialProfilingServerUrl()
+	if opts.ProfilingServerUrl == "" {
+		opts.ProfilingServerUrl = profilingServerUrl
+	}
+
+	if opts.ProfilingServerUrl == "" { // default value
+		opts.ProfilingServerUrl = defaultProfilingServerUrl
+	}
+
+	url := ""
+	if opts.NotifyHost != "" {
+		url = opts.NotifyHost
+	}
+
+	if opts.ServerUrl != "" {
+		url = opts.ServerUrl
+	}
+
+	if url != "" {
+		if opts.ApmServerUrl == defaultApmServerUrl {
+			opts.ApmServerUrl = url
+		}
+		if opts.AnalyticsServerUrl == defaultAnalyticsServerUrl {
+			opts.AnalyticsServerUrl = url
+		}
+		if opts.TracesServerUrl == defaultTracesServerUrl {
+			opts.TracesServerUrl = url
+		}
+		if opts.LogsServerUrl == defaultLogsServerUrl {
+			opts.LogsServerUrl = url
+		}
+		if opts.ProfilingServerUrl == defaultProfilingServerUrl {
+			opts.ProfilingServerUrl = url
+		}
+	}
+
+	if err := opts.applyRegion(); err != nil {
+		log.Printf("[apm]: %s", err)
+		opts.active = false
+		if !continueOnError {
+			return err
+		}
 	}
 
 	tracing, err := initialTracing()
@@ -387,7 +516,7 @@ func (opts *TracerOptions) initDefaults(continueOnError bool) error {
 
 	opts.TraceThreshold = traceThreshold
 
-	opts.Transport.SetNotifyURL(opts.NotifyHost, opts.LicenseKey, opts.ServiceName, AgentVersion) // at_handling send stream
+	opts.Transport.SetNotifyURL(opts.ApmServerUrl, opts.LicenseKey, opts.ServiceName, AgentVersion) // at_handling send stream
 
 	return nil
 }
@@ -400,14 +529,20 @@ type compressionOptions struct {
 
 // tracerService contains the Service Details
 type tracerService struct {
-	AppName           string
-	AppVersion        string
-	Environment       string
-	LicenseKey        string
-	Analytics         bool
-	Tracing           bool
-	TraceThreshold    int
-	NotifyHost        string
+	AppName            string
+	AppVersion         string
+	Environment        string
+	LicenseKey         string
+	Analytics          bool
+	Tracing            bool
+	TraceThreshold     int
+	NotifyHost         string
+	ServerUrl          string
+	ApmServerUrl       string
+	AnalyticsServerUrl string
+	TracesServerUrl    string
+	LogsServerUrl      string
+	ProfilingServerUrl string
 	EndPointProfiling bool
 }
 
@@ -526,6 +661,12 @@ func newTracer(opts TracerOptions) *Tracer {
 	t.Service.Environment = opts.ServiceEnvironment
 	t.Service.LicenseKey = opts.LicenseKey
 	t.Service.NotifyHost = opts.NotifyHost
+	t.Service.ServerUrl = opts.ServerUrl
+	t.Service.ApmServerUrl = opts.ApmServerUrl
+	t.Service.AnalyticsServerUrl = opts.AnalyticsServerUrl
+	t.Service.TracesServerUrl = opts.TracesServerUrl
+	t.Service.LogsServerUrl = opts.LogsServerUrl
+	t.Service.ProfilingServerUrl = opts.ProfilingServerUrl
 	t.Service.Analytics = opts.Analytics
 	t.Service.Tracing = opts.Tracing
 	t.Service.TraceThreshold = opts.TraceThreshold
@@ -571,6 +712,8 @@ func newTracer(opts TracerOptions) *Tracer {
 	})
 	t.setLocalInstrumentationConfig(envIgnoreURLs, func(cfg *instrumentationConfigValues) {
 		cfg.ignoreTransactionURLs = opts.ignoreTransactionURLs
+		cfg.ignoreTransactionURLsCopy = opts.ignoreTransactionURLs
+
 	})
 	t.setLocalInstrumentationConfig(envExitSpanMinDuration, func(cfg *instrumentationConfigValues) {
 		cfg.exitSpanMinDuration = opts.exitSpanMinDuration
@@ -983,7 +1126,7 @@ func (t *Tracer) loop() {
 				}
 			}
 			if agg.features.tracing == true {
-				t.Transport.SetNotifyURL(t.Service.NotifyHost, t.Service.LicenseKey, t.Service.AppName, AgentVersion) // at_handling send stream
+				t.Transport.SetNotifyURL(t.Service.TracesServerUrl, t.Service.LicenseKey, t.Service.AppName, AgentVersion) // at_handling send stream
 				requestResult <- t.Transport.SendStream(ctx, iochanReader)
 			} else {
 				_, _ = ioutil.ReadAll(iochanReader) // discard everything
@@ -1199,7 +1342,9 @@ func (t *Tracer) loop() {
 				case spanEvent:
 					modelWriter.writeSpan(event.span.Span, event.span.SpanData)
 				case errorEvent:
-					modelWriter.writeError(event.err)
+					// NOTE: Do NOT write errors to the stream transport.
+					// The /track/traces/spans endpoint only accepts transactions/spans.
+					// modelWriter.writeError(event.err)
 				}
 			}
 			if !requestActive && buffer.Len() == 0 && metricsBuffer.Len() == 0 {

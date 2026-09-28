@@ -45,6 +45,13 @@ const (
 	envCaptureBody                = "ATATUS_CAPTURE_BODY"
 	envServiceName                = "ATATUS_APP_NAME"
 	envServiceNotifyHost          = "ATATUS_NOTIFY_HOST"
+	envServerUrl                  = "ATATUS_SERVER_URL"
+	envApmServerUrl               = "ATATUS_APM_SERVER_URL"
+	envAnalyticsServerUrl         = "ATATUS_ANALYTICS_SERVER_URL"
+	envTracesServerUrl            = "ATATUS_TRACES_SERVER_URL"
+	envLogsServerUrl              = "ATATUS_LOGS_SERVER_URL"
+	envProfilingServerUrl         = "ATATUS_PROFILING_SERVER_URL"
+	envRegion                     = "ATATUS_REGION"
 	envServiceVersion             = "ATATUS_APP_VERSION"
 	envEnvironment                = "ATATUS_ENVIRONMENT"
 	envLicenseKey                 = "ATATUS_LICENSE_KEY"
@@ -270,6 +277,41 @@ func initialLicenseKey() (key string) {
 func initialNotifyHost() (host string) {
 	host = os.Getenv(envServiceNotifyHost)
 	return host
+}
+
+func initialServerUrl() (url string) {
+	url = os.Getenv(envServerUrl)
+	return url
+}
+
+func initialApmServerUrl() (url string) {
+	url = os.Getenv(envApmServerUrl)
+	return url
+}
+
+func initialAnalyticsServerUrl() (url string) {
+	url = os.Getenv(envAnalyticsServerUrl)
+	return url
+}
+
+func initialTracesServerUrl() (url string) {
+	url = os.Getenv(envTracesServerUrl)
+	return url
+}
+
+func initialLogsServerUrl() (url string) {
+	url = os.Getenv(envLogsServerUrl)
+	return url
+}
+
+func initialProfilingServerUrl() (url string) {
+	url = os.Getenv(envProfilingServerUrl)
+	return url
+}
+
+func initialRegion() (region string) {
+	region = os.Getenv(envRegion)
+	return region
 }
 
 func initialAnalytics() (bool, error) {
@@ -657,6 +699,7 @@ type instrumentationConfigValues struct {
 	stackTraceLimit       int
 	propagateLegacyHeader bool
 	sanitizedFieldNames   wildcard.Matchers
-	ignoreTransactionURLs wildcard.Matchers
+	ignoreTransactionURLs wildcard.Matchers    
+	ignoreTransactionURLsCopy wildcard.Matchers               
 	compressionOptions    compressionOptions
 }

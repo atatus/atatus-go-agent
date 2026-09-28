@@ -514,17 +514,20 @@ func buildAggError(e *ErrorData) *aggError {
 func (agg *aggregator) processError(e *ErrorData) {
 
 	agErr := buildAggError(e)
-	if len(agg.b.err) <= 20 {
-		tracing := agg.features.tracing
-		if agg.service.Tracing == false {
-			tracing = false
-		}
+	if len(agg.b.err) <= agg.features.errorLimit {
+		// tracing := agg.features.tracing
+		// if agg.service.Tracing == false {
+		// 	tracing = false
+		// }
 
 		agg.b.err = append(agg.b.err, agErr)
 
-		if agg.modelWriter != nil && tracing == true { // at_handling send stream
-			agg.modelWriter.writeError(e) // at_handling send stream
-		}
+		// NOTE: Do NOT write errors to the stream transport.
+		// The /track/traces/spans endpoint only accepts transactions and spans, not errors.
+		// Errors are sent separately via the aggregator to /track/apm/error endpoint.
+		// if agg.modelWriter != nil && tracing == true { // at_handling send stream
+		// 	agg.modelWriter.writeError(e) // at_handling send stream
+		// }
 	}
 
 	e.reset()

@@ -129,6 +129,36 @@ type configuration struct {
 	//
 	// Defaults to true
 	Enabled bool
+
+	// ServerUrl controls the server path where the data is to be sent
+	//
+	// You can override using ATATUS_SERVER_URL environment variable.
+	ServerUrl string
+
+	// ApmServerUrl controls the server path where the APM data is to be sent
+	//
+	// You can override using ATATUS_APM_SERVER_URL environment variable.
+	ApmServerUrl string
+
+	// AnalyticsServerUrl controls the server path where the Analytics data is to be sent
+	//
+	// You can override using ATATUS_ANALYTICS_SERVER_URL environment variable.
+	AnalyticsServerUrl string
+
+	// TracesServerUrl controls the server path where the Traces data is to be sent
+	//
+	// You can override using ATATUS_TRACES_SERVER_URL environment variable.
+	TracesServerUrl string
+
+	// LogsServerUrl controls the server path where the Logs data is to be sent
+	//
+	// You can override using ATATUS_LOGS_SERVER_URL environment variable.
+	LogsServerUrl string
+
+	// ProfilingServerUrl controls the server path where the Profiling data is to be sent
+	//
+	// You can override using ATATUS_PROFILING_SERVER_URL environment variable.
+	ProfilingServerUrl string
 }
 
 func newConfiguration(service tracerService) configuration {
@@ -150,6 +180,13 @@ func newConfiguration(service tracerService) configuration {
 	c.UseSSL = true
 	c.SendCode = true
 	c.Enabled = true
+	c.ServerUrl = service.ServerUrl
+	c.ApmServerUrl = service.ApmServerUrl
+	c.AnalyticsServerUrl = service.AnalyticsServerUrl
+	c.TracesServerUrl = service.TracesServerUrl
+	c.LogsServerUrl = service.LogsServerUrl
+	c.ProfilingServerUrl = service.ProfilingServerUrl
+
 
 	return c
 }

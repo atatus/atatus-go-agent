@@ -27,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	"go.atatus.com/agent/internal/configutil"
 	"go.atatus.com/agent/stacktrace"
 )
 
@@ -61,9 +62,12 @@ type hostinfoResponse200 struct {
 	CapturePercentiles    bool     `json:"capturePercentiles"`
 	ExtRequestPatterns    []string `json:"extRequestPatterns"`
 	IgnoreTxnNamePatterns []string `json:"ignoreTxnNamePatterns"`
+	IgnoreTxnUrlPatterns  []string `json:"ignoreTxnUrlPatterns"`
 
 	IgnoreHTTPFailuresPatterns map[string][]string `json:"ignoreHTTPFailurePatterns"`
 	IgnoreExceptionPatterns    map[string][]string `json:"ignoreExceptionPatterns"`
+	ErrorLimit                 *int                `json:"errorLimit"`
+	Performance                *bool               `json:"performance"`
 }
 
 type response struct {
@@ -97,19 +101,13 @@ func (agg *aggregator) sendToBackend(licenseKey, path string, d interface{}) (*r
 
 	var host string
 	if path == analyticsTxnRelativePath {
-		if agg.service.NotifyHost == "https://apm-rx.atatus.com" ||
-			agg.service.NotifyHost == "https://apm-rx-collector.atatus.com" {
-			host = "https://an-rx.atatus.com"
-		} else {
-			host = agg.service.NotifyHost
-		}
+		host = agg.service.AnalyticsServerUrl
 	} else {
-		host = agg.service.NotifyHost
+		host = agg.service.ApmServerUrl
 	}
 
-	notifyHost := strings.TrimSuffix(host, "/") + path
-
-	req, err := http.NewRequest("POST", notifyHost, bytes.NewBuffer(data))
+	serverUrl := strings.TrimSuffix(host, "/") + path
+	req, err := http.NewRequest("POST", serverUrl, bytes.NewBuffer(data))
 	req.Header.Set("Content-Type", "application/json")
 
 	q := req.URL.Query()
@@ -300,6 +298,20 @@ func (agg *aggregator) flush(b *batchEvents) {
 				agg.features.capturePercentiles = r.HostinfoResponse200.CapturePercentiles
 				agg.features.analytics = r.HostinfoResponse200.Analytics
 				agg.features.tracing = r.HostinfoResponse200.Tracing
+				agg.features.ignoreTxnUrls = r.HostinfoResponse200.IgnoreTxnUrlPatterns
+
+				if r.HostinfoResponse200.ErrorLimit == nil || *r.HostinfoResponse200.ErrorLimit < 20 {
+					agg.features.errorLimit = 20
+				} else {
+					agg.features.errorLimit = *r.HostinfoResponse200.ErrorLimit
+				}
+
+				if r.HostinfoResponse200.Performance == nil {
+					agg.features.performance = true
+				} else {
+					agg.features.performance = *r.HostinfoResponse200.Performance
+
+				}
 			}
 		}
 	}
@@ -307,6 +319,13 @@ func (agg *aggregator) flush(b *batchEvents) {
 
 	if agg.features.blocked == true {
 		return
+	}
+
+	if len(agg.features.ignoreTxnUrls) > 0 {
+		joinedPatterns := strings.Join(agg.features.ignoreTxnUrls, ",")
+		matches := configutil.ParseWildcardPatterns(joinedPatterns)
+		transactionUrls := append(DefaultTracer.instrumentationConfig().ignoreTransactionURLsCopy, matches...)
+		DefaultTracer.instrumentationConfig().ignoreTransactionURLs = transactionUrls
 	}
 
 	if len(b.err) > 0 {
@@ -338,7 +357,8 @@ func (agg *aggregator) flush(b *batchEvents) {
 			}
 			tp.T = append(tp.T, t)
 		}
-		if len(tp.T) > 0 {
+
+		if len(tp.T) > 0 && agg.features.performance == true {
 			agg.sendToBackend(agg.service.LicenseKey, txnRelativePath, tp)
 		}
 	}
@@ -434,7 +454,9 @@ func (agg *aggregator) flush(b *batchEvents) {
 				singleTracePayload.StartTime = tp.StartTime
 				singleTracePayload.header = tp.header
 				singleTracePayload.T = append(singleTracePayload.T, tp.T[i])
-				agg.sendToBackend(agg.service.LicenseKey, traceRelativePath, singleTracePayload)
+				if agg.features.performance == true {
+					agg.sendToBackend(agg.service.LicenseKey, traceRelativePath, singleTracePayload)
+				}
 			}
 		}
 	}
@@ -454,7 +476,9 @@ func (agg *aggregator) flush(b *batchEvents) {
 			emp.R = b.errRequest
 		}
 
-		agg.sendToBackend(agg.service.LicenseKey, errorMetricRelativePath, emp)
+		if agg.features.performance == true {
+			agg.sendToBackend(agg.service.LicenseKey, errorMetricRelativePath, emp)
+		}
 	}
 
 	if len(b.metrics) > 0 {
@@ -464,6 +488,8 @@ func (agg *aggregator) flush(b *batchEvents) {
 		mp.header = h
 		mp.M = b.metrics
 
-		agg.sendToBackend(agg.service.LicenseKey, metricsRelativePath, mp)
+		if agg.features.performance == true {
+			agg.sendToBackend(agg.service.LicenseKey, metricsRelativePath, mp)
+		}
 	}
 }

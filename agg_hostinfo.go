@@ -47,9 +47,18 @@ func (agg *aggregator) agentSettingsMap() map[string]interface{} {
 	settings["appVersion"] = agg.service.AppVersion
 	settings["agentVersion"] = AgentVersion
 	settings["analytics"] = agg.service.Analytics
+	settings["tracing"] = agg.service.Tracing
 	settings["environment"] = agg.service.Environment
 	settings["goCompiler"] = goRuntime.Name
 	settings["go"] = goRuntime.Version
 	settings["traceThreshold"] = agg.service.TraceThreshold
+	settings["notifyHost"] = agg.service.NotifyHost
+	settings["serverUrl"] = agg.service.ServerUrl
+	settings["apmServerUrl"] = agg.service.ApmServerUrl
+	settings["analyticsServerUrl"] = agg.service.AnalyticsServerUrl
+	settings["tracesServerUrl"] = agg.service.TracesServerUrl
+	settings["logsServerUrl"] = agg.service.LogsServerUrl
+	settings["profilingServerUrl"] = agg.service.ProfilingServerUrl
+
 	return settings
 }

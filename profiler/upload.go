@@ -20,12 +20,13 @@ import (
 	"strings"
 	"time"
 
+	"go.atatus.com/agent"
 	"go.atatus.com/agent/profiler-internal/log"         //ATCHG - changed go import path
 	"go.atatus.com/agent/profiler-internal/orchestrion" //ATCHG - changed go import path
 	"go.atatus.com/agent/profiler-internal/processtags" //ATCHG - changed go import path
 )
 
-var AtatusEndpoint = "https://profiling-rx.atatus.com"
+var AtatusEndpoint = atatus.DefaultTracer.Service.ProfilingServerUrl
 
 // maxRetries specifies the maximum number of retries to have when an error occurs.
 const maxRetries = 2

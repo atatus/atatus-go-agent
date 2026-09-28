@@ -1,9 +1,9 @@
 package profiler
 
 import (
-	"os"
 	"testing"
 
+	atatus "go.atatus.com/agent"
 	"go.atatus.com/agent/profiler-internal/log"
 )
 
@@ -18,18 +18,18 @@ func TestWithAPIKey(t *testing.T) {
 	}
 }
 
-func TestAPIKeyFromEnv(t *testing.T) {
-	apiKey := "env-api-key"
-	os.Setenv("ATATUS_API_KEY", apiKey)
-	defer os.Unsetenv("ATATUS_API_KEY")
+func TestLicenseKeyFromDefaultTracer(t *testing.T) {
+	prev := atatus.DefaultTracer.Service.LicenseKey
+	atatus.DefaultTracer.Service.LicenseKey = "test-tracer-license-key"
+	defer func() { atatus.DefaultTracer.Service.LicenseKey = prev }()
 
 	cfg, err := defaultConfig()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if cfg.apiKey != apiKey {
-		t.Errorf("expected apiKey to be %q, got %q", apiKey, cfg.apiKey)
+	if cfg.apiKey != "test-tracer-license-key" {
+		t.Errorf("expected apiKey to be %q, got %q", "test-tracer-license-key", cfg.apiKey)
 	}
 }
 

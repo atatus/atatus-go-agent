@@ -20,6 +20,7 @@ package atatus // import "go.atatus.com/agent"
 import (
 	"context"
 	"runtime"
+	"time"
 
 	sysinfo "github.com/elastic/go-sysinfo"
 	"github.com/elastic/go-sysinfo/types"
@@ -30,15 +31,25 @@ import (
 //   - memstats (allocations, usage, GC, etc.)
 //   - system and process CPU and memory usage
 type builtinMetricsGatherer struct {
-	tracer         *Tracer
-	lastSysMetrics sysMetrics
+	tracer                  *Tracer
+	lastSysMetrics          sysMetrics
+	lastMemStatsMetrics     runtime.MemStats
+	lastMemStatsMetricsTime time.Time
 }
 
 func newBuiltinMetricsGatherer(t *Tracer) *builtinMetricsGatherer {
-	g := &builtinMetricsGatherer{tracer: t}
+
+	g := &builtinMetricsGatherer{
+		lastMemStatsMetricsTime: time.Now(),
+		tracer:                  t,
+	}
+
 	if metrics, err := gatherSysMetrics(); err == nil {
 		g.lastSysMetrics = metrics
 	}
+
+	runtime.ReadMemStats(&g.lastMemStatsMetrics)
+
 	return g
 }
 
@@ -56,6 +67,7 @@ func (g *builtinMetricsGatherer) gatherSystemMetrics(m *Metrics) {
 	if err != nil {
 		return
 	}
+
 	systemCPU, processCPU := calculateCPUUsage(metrics.cpu, g.lastSysMetrics.cpu)
 	m.Add("system.cpu.total.norm.pct", nil, systemCPU)
 	m.Add("system.process.cpu.total.norm.pct", nil, processCPU)
@@ -67,31 +79,53 @@ func (g *builtinMetricsGatherer) gatherSystemMetrics(m *Metrics) {
 }
 
 func (g *builtinMetricsGatherer) gatherMemStatsMetrics(m *Metrics) {
-	var mem runtime.MemStats
-	runtime.ReadMemStats(&mem)
+	var cur runtime.MemStats
+	runtime.ReadMemStats(&cur)
+
+	prev := g.lastMemStatsMetrics
+	g.lastMemStatsMetrics = cur
+	currTime := time.Now()
+	elapsed := currTime.Sub(g.lastMemStatsMetricsTime)
+	g.lastMemStatsMetricsTime = currTime
 
 	addUint64 := func(name string, v uint64) {
 		m.Add(name, nil, float64(v))
 	}
+
 	add := func(name string, v float64) {
 		m.Add(name, nil, v)
 	}
+	
+	addUint64("golang.heap.allocations.allocated", cur.HeapAlloc)
+	deltaNumGC := cur.NumGC - prev.NumGC
+	deltaPauseTotalNs := cur.PauseTotalNs - prev.PauseTotalNs
 
-	addUint64("golang.heap.allocations.mallocs", mem.Mallocs)
-	addUint64("golang.heap.allocations.frees", mem.Frees)
-	addUint64("golang.heap.allocations.objects", mem.HeapObjects)
-	addUint64("golang.heap.allocations.total", mem.TotalAlloc)
-	addUint64("golang.heap.allocations.allocated", mem.HeapAlloc)
-	addUint64("golang.heap.allocations.idle", mem.HeapIdle)
-	addUint64("golang.heap.allocations.active", mem.HeapInuse)
-	addUint64("golang.heap.system.total", mem.Sys)
-	addUint64("golang.heap.system.obtained", mem.HeapSys)
-	addUint64("golang.heap.system.stack", mem.StackSys)
-	addUint64("golang.heap.system.released", mem.HeapReleased)
-	addUint64("golang.heap.gc.next_gc_limit", mem.NextGC)
-	addUint64("golang.heap.gc.total_count", uint64(mem.NumGC))
-	addUint64("golang.heap.gc.total_pause.ns", mem.PauseTotalNs)
-	add("golang.heap.gc.cpu_fraction", mem.GCCPUFraction)
+	addUint64("golang.heap.gc.count", uint64(deltaNumGC))
+	addUint64("golang.heap.gc.pause_total.ns", deltaPauseTotalNs)
+
+	gcPauseFraction := float64(deltaPauseTotalNs) / float64(elapsed.Nanoseconds())
+
+	add("golang.heap.gc.pause_fraction", gcPauseFraction)
+
+	if deltaNumGC > 0 {
+		maxPauseNs := deltaPauseTotalNs / uint64(deltaNumGC)
+		minPauseNs := deltaPauseTotalNs / uint64(deltaNumGC)
+
+		for i := prev.NumGC + 1; i <= cur.NumGC; i++ {
+			index := (i + 255) % 256
+			pause := cur.PauseNs[index]
+			if pause > maxPauseNs {
+				maxPauseNs = pause
+			}
+			if pause < minPauseNs {
+				minPauseNs = pause
+			}
+		}
+
+		addUint64("golang.heap.gc.pause.min.ns", minPauseNs)
+		addUint64("golang.heap.gc.pause.max.ns", maxPauseNs)
+	}
+
 }
 
 func calculateCPUUsage(current, last cpuMetrics) (systemUsage, processUsage float64) {

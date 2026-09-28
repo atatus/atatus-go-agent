@@ -13,12 +13,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
+	"go.atatus.com/agent"
 	internal "go.atatus.com/agent/profiler-internal"     //ATCHG - changed go import path
 	"go.atatus.com/agent/profiler-internal/globalconfig" //ATCHG - changed go import path
 	"go.atatus.com/agent/profiler-internal/log"          //ATCHG - changed go import path
@@ -156,9 +156,25 @@ func (c *config) addProfileType(t ProfileType) {
 }
 
 func defaultConfig() (*config, error) {
+	var apiURL, service, apiKey, env, appVersion string
+
+	if atatus.DefaultTracer != nil {
+		apiURL = atatus.DefaultTracer.Service.ProfilingServerUrl
+		service = atatus.DefaultTracer.Service.AppName
+		appVersion = atatus.DefaultTracer.Service.AppVersion
+		env = atatus.DefaultTracer.Service.Environment
+		apiKey = atatus.DefaultTracer.Service.LicenseKey
+	}
+	if apiURL == "" {
+		apiURL = defaultAPIURL
+	}
+
 	c := config{
-		apiURL:               defaultAPIURL,
-		service:              filepath.Base(os.Args[0]),
+		apiURL:               apiURL,
+		service:              service,
+		apiKey:               apiKey,
+		env:                  env,
+		version:              appVersion,
 		httpClient:           defaultClient,
 		period:               DefaultPeriod,
 		cpuDuration:          DefaultDuration,
@@ -202,21 +218,9 @@ func defaultConfig() (*config, error) {
 		}
 		WithUploadTimeout(d)(&c)
 	}
-	if v := os.Getenv("ATATUS_API_KEY"); v != "" { // ATCHG - DD_API_KEY changed into ATATUS_API_KEY
-		c.apiKey = v
-	}
 	c.agentless = internal.BoolEnv("ATATUS_PROFILING_AGENTLESS", false) //ATCHG - DD_PROFILING_AGENTLESS changed into ATATUS_PROFILING_AGENTLESS
 	if v := os.Getenv("ATATUS_SITE"); v != "" {                         //ATCHG - DD_SITE changed into ATATUS_SITE
 		WithSite(v)(&c)
-	}
-	if v := os.Getenv("ATATUS_ENV"); v != "" { // ATCHG - DD_ENV changed into ATATUS_ENV
-		WithEnv(v)(&c)
-	}
-	if v := os.Getenv("ATATUS_SERVICE"); v != "" { //ATCHG - DD_SERVICE changed into ATATUS_SERVICE
-		WithService(v)(&c)
-	}
-	if v := os.Getenv("ATATUS_VERSION"); v != "" { //ATCHG - DD_VERSION  changed into ATATUS_VERSION
-		WithVersion(v)(&c)
 	}
 	c.flushOnExit = internal.BoolEnv("ATATUS_PROFILING_FLUSH_ON_EXIT", false) // ATCHG - DD_PROFILING_FLUSH_ON_EXIT  changed into ATATUS_PROFILING_FLUSH_ON_EXIT
 
@@ -290,13 +294,6 @@ func WithLogLevel(level string) Option {
 
 // An Option is used to configure the profiler's behaviour.
 type Option func(*config)
-
-// WithAgentAddr specifies the address to use when reaching the Atatus Agent
-func WithAgentAddr(hostport string) Option {
-	return func(cfg *config) {
-		cfg.agentURL = "http://" + "profiling-rx.atatus.com" + "/v1/profiling" //ATCHg - changed URL
-	}
-}
 
 // WithDeltaProfiles specifies if delta profiles are enabled. The default value
 // is true. This option takes precedence over the DD_PROFILING_DELTA
