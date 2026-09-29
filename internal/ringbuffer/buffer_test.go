@@ -20,10 +20,14 @@ package ringbuffer
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -82,6 +86,52 @@ func TestBufferEviction(t *testing.T) {
 		assert.Equal(t, BlockTag(i), h.Tag)
 		assert.Equal(t, uint32(len(block)), h.Size)
 	}
+}
+
+// TestConcurrentWriteBlockRace reproduces the customer-reported "agent stops
+// sending data" bug: the tracer loop's WriteBlockTo and the aggregator's
+// WriteBlock run on separate goroutines against the same *Buffer with no
+// synchronization (see GO_BUGFIX_PLAN.md). A small buffer maximizes how often
+// the read/write positions cross paths, so this reliably surfaces the race
+// within a couple seconds instead of requiring hours of production traffic.
+//
+// Expected today (unfixed): this test panics or `go test -race` reports a
+// DATA RACE. After the real fix (mutex + bounds check), it should pass clean
+// under -race.
+func TestConcurrentWriteBlockRace(t *testing.T) {
+	b := New(4096)
+	data := []byte(strings.Repeat("x", 200))
+
+	var panicMsg atomic.Value // string
+	deadline := time.Now().Add(3 * time.Second)
+
+	run := func(who string, fn func()) {
+		defer func() {
+			if r := recover(); r != nil {
+				panicMsg.CompareAndSwap(nil, fmt.Sprintf("%s panicked: %v", who, r))
+			}
+		}()
+		for time.Now().Before(deadline) {
+			fn()
+		}
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		run("WriteBlock", func() { b.WriteBlock(data, 1) })
+	}()
+	go func() {
+		defer wg.Done()
+		run("WriteBlockTo", func() { b.WriteBlockTo(ioutil.Discard) })
+	}()
+	wg.Wait()
+
+	if v := panicMsg.Load(); v != nil {
+		t.Fatalf("reproduced the ring buffer race from GO_BUGFIX_PLAN.md: %s", v)
+	}
+	t.Log("no panic in this run — the race is timing-dependent; re-run, or run with -race to catch the underlying data race directly")
 }
 
 func BenchmarkWrite(b *testing.B) {

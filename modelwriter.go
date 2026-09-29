@@ -18,6 +18,7 @@
 package atatus // import "go.atatus.com/agent"
 
 import (
+	"sync/atomic"
 	"time"
 
 	"go.atatus.com/agent/internal/ringbuffer"
@@ -270,7 +271,7 @@ func (w *modelWriter) setStacktraceContext(stack []model.StacktraceFrame) {
 		if w.cfg.logger != nil {
 			w.cfg.logger.Debugf("setting context failed: %v", err)
 		}
-		w.stats.Errors.SetContext++
+		atomic.AddUint64(&w.stats.Errors.SetContext, 1)
 	}
 }
 

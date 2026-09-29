@@ -2,7 +2,7 @@ module genmod
 
 require (
 	github.com/pkg/errors v0.8.1
-	go.atatus.com/agent v1.5.0
+	go.atatus.com/agent v1.6.0
 )
 
 replace go.atatus.com/agent => ../..

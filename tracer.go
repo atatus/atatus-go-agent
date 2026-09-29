@@ -578,6 +578,7 @@ type Tracer struct {
 	metricsBufferSize int
 	closing           chan struct{}
 	closed            chan struct{}
+	closeOnce         sync.Once
 	forceFlush        chan chan<- struct{}
 	forceSendMetrics  chan chan<- struct{}
 	configCommands    chan tracerConfigCommand
@@ -729,7 +730,7 @@ func newTracer(opts TracerOptions) *Tracer {
 
 	if !opts.active {
 		t.active = 0
-		close(t.closed)
+		t.closeOnce.Do(func() { close(t.closed) })
 		return t
 	}
 
@@ -1078,13 +1079,29 @@ func (t *Tracer) Stats() TracerStats {
 }
 
 func (t *Tracer) loop() {
+	atomic.StoreInt32(&t.active, 1)
 
 	agg := newAggregator(&t.Service)
 
 	ctx, cancelContext := context.WithCancel(context.Background())
 	defer cancelContext()
-	defer close(t.closed)
-	defer atomic.StoreInt32(&t.active, 0)
+	defer t.closeOnce.Do(func() { close(t.closed) })
+
+	restarting := false
+	defer func() {
+		if !restarting {
+			atomic.StoreInt32(&t.active, 0)
+		}
+	}()
+	defer func() {
+		if r := recover(); r != nil {
+			restarting = true
+			if apmlog.DefaultLogger != nil {
+				apmlog.DefaultLogger.Errorf("tracer loop panicked: %v; restarting", r)
+			}
+			go t.loop()
+		}
+	}()
 
 	var req iochan.ReadRequest
 	var requestBuf bytes.Buffer
@@ -1165,11 +1182,11 @@ func (t *Tracer) loop() {
 	buffer.Evicted = func(h ringbuffer.BlockHeader) {
 		switch h.Tag {
 		case errorBlockTag:
-			stats.ErrorsDropped++
+			atomic.AddUint64(&t.stats.ErrorsDropped, 1)
 		case spanBlockTag:
-			stats.SpansDropped++
+			atomic.AddUint64(&t.stats.SpansDropped, 1)
 		case transactionBlockTag:
-			stats.TransactionsDropped++
+			atomic.AddUint64(&t.stats.TransactionsDropped, 1)
 		}
 	}
 	modelWriter := modelWriter{
@@ -1179,7 +1196,9 @@ func (t *Tracer) loop() {
 		stats:         &stats,
 	}
 
-	agg.setModelWriter(&modelWriter) // at_handling send stream
+	aggModelWriter := modelWriter
+	aggModelWriter.stats = t.stats
+	agg.setModelWriter(&aggModelWriter) // at_handling send stream
 
 	handleTracerConfigCommand := func(cmd tracerConfigCommand) {
 		var oldMetricsInterval time.Duration

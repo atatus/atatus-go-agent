@@ -20,8 +20,10 @@ package ringbuffer
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"io/ioutil"
+	"sync"
 )
 
 // BlockHeaderSize is the size of the block header, in bytes.
@@ -41,6 +43,7 @@ type BlockHeader struct {
 
 // Buffer is a ring buffer of byte blocks.
 type Buffer struct {
+	mu        sync.Mutex
 	buf       []byte
 	headerbuf [BlockHeaderSize]byte
 	len       int
@@ -62,6 +65,8 @@ func New(size int) *Buffer {
 // Len returns the number of bytes currently in the buffer, including
 // block-accounting bytes.
 func (b *Buffer) Len() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	return b.len
 }
 
@@ -72,6 +77,12 @@ func (b *Buffer) Cap() int {
 
 // WriteBlockTo writes the oldest block in b to w, returning the block header and the number of bytes written to w.
 func (b *Buffer) WriteBlockTo(w io.Writer) (header BlockHeader, written int64, err error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.writeBlockTo(w)
+}
+
+func (b *Buffer) writeBlockTo(w io.Writer) (header BlockHeader, written int64, err error) {
 	if b.len == 0 {
 		return header, 0, io.EOF
 	}
@@ -84,6 +95,13 @@ func (b *Buffer) WriteBlockTo(w io.Writer) (header BlockHeader, written int64, e
 	header.Tag = BlockTag(b.headerbuf[0])
 	header.Size = binary.LittleEndian.Uint32(b.headerbuf[1:])
 	size := int(header.Size)
+
+	if size < 0 || size > b.Cap() {
+		b.read = 0
+		b.write = 0
+		b.len = 0
+		return header, 0, fmt.Errorf("corrupted block header: size %d exceeds capacity %d", size, b.Cap())
+	}
 
 	if b.read+size > b.Cap() {
 		tail := b.buf[b.read:]
@@ -114,12 +132,18 @@ func (b *Buffer) WriteBlockTo(w io.Writer) (header BlockHeader, written int64, e
 // If the buffer does not currently have room for the block, then the
 // oldest blocks will be evicted until enough room is available.
 func (b *Buffer) WriteBlock(p []byte, tag BlockTag) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.writeBlock(p, tag)
+}
+
+func (b *Buffer) writeBlock(p []byte, tag BlockTag) (int, error) {
 	lenp := len(p)
 	if lenp+BlockHeaderSize > b.Cap() {
 		return 0, bytes.ErrTooLarge
 	}
-	for lenp+BlockHeaderSize > b.Cap()-b.Len() {
-		header, _, err := b.WriteBlockTo(ioutil.Discard)
+	for lenp+BlockHeaderSize > b.Cap()-b.len {
+		header, _, err := b.writeBlockTo(ioutil.Discard)
 		if err != nil {
 			return 0, err
 		}
