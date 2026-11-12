@@ -164,11 +164,7 @@ func startTransaction(ctx context.Context, tracer *atatus.Tracer, name string) (
 	var opts atatus.TransactionOptions
 	md, ok := metadata.FromIncomingContext(ctx)
 	if ok {
-		traceContext, ok := getIncomingMetadataTraceContext(md, w3cTraceparentHeader)
-		if !ok {
-			traceContext, _ = getIncomingMetadataTraceContext(md, atatusTraceparentHeader)
-		}
-		opts.TraceContext = traceContext
+		opts.TraceContext = getIncomingMetadataTraceContext(md)
 	}
 	tx := tracer.StartTransactionOptions(name, "request", opts)
 	tx.Context.SetFramework("grpc", grpc.Version)
@@ -204,15 +200,17 @@ func startTransaction(ctx context.Context, tracer *atatus.Tracer, name string) (
 	return tx, atatus.ContextWithTransaction(ctx, tx)
 }
 
-func getIncomingMetadataTraceContext(md metadata.MD, header string) (atatus.TraceContext, bool) {
-	if values := md.Get(header); len(values) == 1 {
-		traceContext, err := athttp.ParseTraceparentHeader(values[0])
-		if err == nil {
-			traceContext.State, _ = athttp.ParseTracestateHeader(md.Get(tracestateHeader)...)
-			return traceContext, true
+func getIncomingMetadataTraceContext(md metadata.MD) atatus.TraceContext {
+	traceContext, ok := athttp.ResolveTraceparent(func(name string) string {
+		if values := md.Get(name); len(values) == 1 {
+			return values[0]
 		}
+		return ""
+	})
+	if ok {
+		traceContext.State, _ = athttp.ParseTracestateHeader(md.Get(tracestateHeader)...)
 	}
-	return atatus.TraceContext{}, false
+	return traceContext
 }
 
 func setTransactionResult(tx *atatus.Transaction, err error) {

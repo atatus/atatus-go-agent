@@ -98,10 +98,9 @@ func setResponseContext(ctx *fasthttp.RequestCtx, tx *atatus.Transaction, bc *at
 func StartTransactionWithBody(
 	ctx *fasthttp.RequestCtx, tracer *atatus.Tracer, name string,
 ) (*atatus.Transaction, *atatus.BodyCapturer, error) {
-	traceContext, ok := getRequestTraceparent(ctx, athttp.W3CTraceparentHeader)
-	if !ok {
-		traceContext, ok = getRequestTraceparent(ctx, athttp.AtatusTraceparentHeader)
-	}
+	traceContext, ok := athttp.ResolveTraceparent(func(name string) string {
+		return string(ctx.Request.Header.Peek(name))
+	})
 
 	if ok {
 		tracestateHeader := string(ctx.Request.Header.Peek(athttp.TracestateHeader))

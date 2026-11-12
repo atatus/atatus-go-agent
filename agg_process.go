@@ -502,7 +502,7 @@ func buildAggError(e *ErrorData) *aggError {
 		f.LineNumber = v.Line
 
 		packagePath, _ := stacktrace.SplitFunctionName(v.Function)
-		f.InProject = stacktrace.IsLibraryPackage(packagePath)
+		f.InProject = !stacktrace.IsLibraryPackage(packagePath)
 
 		agErr.StackTraces[0].Frames = append(agErr.StackTraces[0].Frames, f)
 	}

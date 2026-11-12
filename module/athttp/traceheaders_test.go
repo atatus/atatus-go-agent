@@ -18,11 +18,13 @@
 package athttp_test
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	atatus "go.atatus.com/agent"
+	"go.atatus.com/agent/apmtest"
 	"go.atatus.com/agent/module/athttp"
 )
 
@@ -88,4 +90,52 @@ func TestParseTracestateHeader(t *testing.T) {
 
 	tracestate, _ = assertParse("vendorname1=opaqueValue1", "vendorname2=opaqueValue2")
 	assert.Equal(t, "vendorname1=opaqueValue1,vendorname2=opaqueValue2", tracestate.String())
+}
+
+func TestResolveTraceparent(t *testing.T) {
+	const (
+		caller   = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+		frontEnd = "00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01"
+		other    = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+	)
+	for name, tc := range map[string]struct {
+		w3c, own string
+		expectOK bool
+		expectTP string
+	}{
+		"none":                      {},
+		"w3c only":                  {w3c: frontEnd, expectOK: true, expectTP: frontEnd},
+		"atatus only":               {own: caller, expectOK: true, expectTP: caller},
+		"identical":                 {w3c: caller, own: caller, expectOK: true, expectTP: caller},
+		"w3c parent rewritten":      {w3c: frontEnd, own: caller, expectOK: true, expectTP: caller},
+		"different trace keeps w3c": {w3c: other, own: caller, expectOK: true, expectTP: other},
+		"invalid w3c falls back":    {w3c: "nonsense", own: caller, expectOK: true, expectTP: caller},
+		"invalid atatus keeps w3c":  {w3c: frontEnd, own: "nonsense", expectOK: true, expectTP: frontEnd},
+		"both invalid":              {w3c: "nonsense", own: "nonsense"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			headers := map[string]string{athttp.W3CTraceparentHeader: tc.w3c, athttp.AtatusTraceparentHeader: tc.own}
+			out, ok := athttp.ResolveTraceparent(func(name string) string { return headers[name] })
+			assert.Equal(t, tc.expectOK, ok)
+			if tc.expectOK {
+				assert.Equal(t, tc.expectTP, athttp.FormatTraceparentHeader(out))
+			} else {
+				assert.Zero(t, out)
+			}
+		})
+	}
+}
+
+func TestStartTransactionPrefersAtatusHeaderWhenW3CParentRewritten(t *testing.T) {
+	tracer := apmtest.NewDiscardTracer()
+	defer tracer.Close()
+
+	req, _ := http.NewRequest("GET", "http://server.testing/echo", nil)
+	req.Header.Set("Traceparent", "00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01")
+	req.Header.Set("Atatus-Apm-Traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
+	tx, _ := athttp.StartTransaction(tracer, "GET /echo", req)
+	defer tx.Discard()
+
+	assert.Equal(t, "0af7651916cd43dd8448eb211c80319c", tx.TraceContext().Trace.String())
+	assert.Equal(t, "b7ad6b7169203331", tx.ParentID().String())
 }

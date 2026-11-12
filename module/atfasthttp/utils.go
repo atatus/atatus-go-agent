@@ -27,18 +27,7 @@ import (
 	"github.com/valyala/fasthttp"
 
 	atatus "go.atatus.com/agent"
-	"go.atatus.com/agent/module/athttp"
 )
-
-func getRequestTraceparent(ctx *fasthttp.RequestCtx, header string) (atatus.TraceContext, bool) {
-	if value := ctx.Request.Header.Peek(header); len(value) > 0 {
-		if c, err := athttp.ParseTraceparentHeader(string(value)); err == nil {
-			return c, true
-		}
-	}
-
-	return atatus.TraceContext{}, false
-}
 
 // NewDynamicServerRequestIgnorer returns the RequestIgnorer to use in
 // handler. The list of wildcard patterns comes from central config

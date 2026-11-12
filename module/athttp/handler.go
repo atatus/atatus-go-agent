@@ -110,10 +110,9 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 //
 // DEPRECATED. Use StartTransactionWithBody instead.
 func StartTransaction(tracer *atatus.Tracer, name string, req *http.Request) (*atatus.Transaction, *http.Request) {
-	traceContext, ok := getRequestTraceparent(req, W3CTraceparentHeader)
-	if !ok {
-		traceContext, ok = getRequestTraceparent(req, AtatusTraceparentHeader)
-	}
+	traceContext, ok := ResolveTraceparent(func(name string) string {
+		return getRequestHeader(req, name)
+	})
 	if ok {
 		traceContext.State, _ = ParseTracestateHeader(req.Header[TracestateHeader]...)
 	}
@@ -137,13 +136,11 @@ func StartTransactionWithBody(tracer *atatus.Tracer, name string, req *http.Requ
 	return tx, bc, req
 }
 
-func getRequestTraceparent(req *http.Request, header string) (atatus.TraceContext, bool) {
-	if values := req.Header[header]; len(values) == 1 && values[0] != "" {
-		if c, err := ParseTraceparentHeader(values[0]); err == nil {
-			return c, true
-		}
+func getRequestHeader(req *http.Request, header string) string {
+	if values := req.Header[header]; len(values) == 1 {
+		return values[0]
 	}
-	return atatus.TraceContext{}, false
+	return ""
 }
 
 // SetTransactionContext sets tx.Result and, if the transaction is being

@@ -56,6 +56,19 @@ func FormatTraceparentHeader(c atatus.TraceContext) string {
 	return fmt.Sprintf("%02x-%032x-%016x-%02x", 0, c.Trace[:], c.Span[:], c.Options)
 }
 
+// ResolveTraceparent prefers the Atatus header when it shares the W3C header's trace ID, because proxies like Google's front end rewrite only the W3C parent ID.
+func ResolveTraceparent(header func(name string) string) (atatus.TraceContext, bool) {
+	w3c, w3cErr := ParseTraceparentHeader(header(W3CTraceparentHeader))
+	own, ownErr := ParseTraceparentHeader(header(AtatusTraceparentHeader))
+	switch {
+	case ownErr == nil && (w3cErr != nil || own.Trace == w3c.Trace):
+		return own, true
+	case w3cErr == nil:
+		return w3c, true
+	}
+	return atatus.TraceContext{}, false
+}
+
 // ParseTraceparentHeader parses the given header, which is expected to be in
 // the W3C Trace-Context traceparent format according to W3C Editor's Draft 23 May 2018:
 //     https://w3c.github.io/trace-context/#traceparent-field

@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## 1.7.0 (Thu, 22 Oct 2026)
+
+- Fixed distributed tracing when proxies (e.g. Google Front End) rewrite the W3C traceparent header, across HTTP, fasthttp, gRPC, and OpenTracing.
+- Fixed in-project stack frame detection for error grouping.
+
+
 ## 1.6.0 (Mon, 29 Sep 2026)
 
 - Added support for data regions.

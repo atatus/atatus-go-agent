@@ -137,26 +137,19 @@ func (t *otTracer) Inject(sc opentracing.SpanContext, format interface{}, carrie
 func (t *otTracer) Extract(format interface{}, carrier interface{}) (opentracing.SpanContext, error) {
 	switch format {
 	case opentracing.TextMap, opentracing.HTTPHeaders:
-		var traceparentHeaderValue string
+		traceparents := make(map[string]string, 2)
 		var tracestateHeaderValues []string
 		switch carrier := carrier.(type) {
 		case opentracing.HTTPHeadersCarrier:
-			traceparentHeaderValue = http.Header(carrier).Get(athttp.W3CTraceparentHeader)
-			if traceparentHeaderValue == "" {
-				traceparentHeaderValue = http.Header(carrier).Get(athttp.AtatusTraceparentHeader)
+			for _, name := range []string{athttp.W3CTraceparentHeader, athttp.AtatusTraceparentHeader} {
+				traceparents[name] = http.Header(carrier).Get(name)
 			}
 			tracestateHeaderValues = http.Header(carrier)[athttp.TracestateHeader]
 		case opentracing.TextMapReader:
 			carrier.ForeachKey(func(key, val string) error {
-				switch textproto.CanonicalMIMEHeaderKey(key) {
-				case athttp.W3CTraceparentHeader:
-					traceparentHeaderValue = val
-				case athttp.AtatusTraceparentHeader:
-					// The W3C header value always trumps the Elastic one,
-					// hence we only set the value if not set already.
-					if traceparentHeaderValue == "" {
-						traceparentHeaderValue = val
-					}
+				switch key = textproto.CanonicalMIMEHeaderKey(key); key {
+				case athttp.W3CTraceparentHeader, athttp.AtatusTraceparentHeader:
+					traceparents[key] = val
 				case athttp.TracestateHeader:
 					tracestateHeaderValues = append(tracestateHeaderValues, val)
 				}
@@ -165,11 +158,16 @@ func (t *otTracer) Extract(format interface{}, carrier interface{}) (opentracing
 		default:
 			return nil, opentracing.ErrInvalidCarrier
 		}
-		if traceparentHeaderValue == "" {
-			return nil, opentracing.ErrSpanContextNotFound
-		}
-		traceContext, err := athttp.ParseTraceparentHeader(traceparentHeaderValue)
-		if err != nil {
+		traceContext, ok := athttp.ResolveTraceparent(func(name string) string { return traceparents[name] })
+		if !ok {
+			value := traceparents[athttp.W3CTraceparentHeader]
+			if value == "" {
+				value = traceparents[athttp.AtatusTraceparentHeader]
+			}
+			if value == "" {
+				return nil, opentracing.ErrSpanContextNotFound
+			}
+			_, err := athttp.ParseTraceparentHeader(value)
 			return nil, err
 		}
 		traceContext.State, _ = athttp.ParseTracestateHeader(tracestateHeaderValues...)
